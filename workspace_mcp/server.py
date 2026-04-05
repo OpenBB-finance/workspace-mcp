@@ -46,6 +46,11 @@ PARAM_OPTIONS_SHAPE = (
     "Use param_options_queries items shaped like {origin, widget_id, "
     "param_name, data_args}."
 )
+GENERATIVE_WIDGET_GUIDANCE = (
+    "For add_generative_widget: note and html require string data. "
+    "table requires list[dict] data. chart requires list[dict] data plus "
+    "chart_params with chartType, xKey, and non-empty yKey."
+)
 WIDGET_INSTANCE_GUIDANCE = (
     "Prefer widget_uuid for read, update, and delete. widget_id is only a fallback "
     "when exactly one matching widget instance exists on the target dashboard."
@@ -133,6 +138,52 @@ def invalid_request(command: str, message: str) -> ToolResponse:
             "retryable": False,
         },
     }
+
+
+def validate_add_generative_widget_request(
+    *,
+    widget_type: str,
+    data: list[dict[str, Any]] | str | None,
+    chart_params: dict[str, Any] | None,
+) -> str | None:
+    """Validate widget-type-specific generative widget payload requirements."""
+    if widget_type in {"note", "html"}:
+        if not isinstance(data, str):
+            return (
+                f"add_generative_widget with widget_type='{widget_type}' "
+                "requires string data."
+            )
+        return None
+
+    if not isinstance(data, list):
+        return (
+            f"add_generative_widget with widget_type='{widget_type}' "
+            "requires data as list[dict]."
+        )
+
+    if widget_type != "chart":
+        return None
+
+    if not isinstance(chart_params, dict):
+        return (
+            "add_generative_widget with widget_type='chart' requires chart_params "
+            "with chartType, xKey, and non-empty yKey."
+        )
+
+    y_key = chart_params.get("yKey")
+    if (
+        not isinstance(chart_params.get("chartType"), str)
+        or not isinstance(chart_params.get("xKey"), str)
+        or not isinstance(y_key, list)
+        or not y_key
+        or not all(isinstance(item, str) for item in y_key)
+    ):
+        return (
+            "add_generative_widget with widget_type='chart' requires chart_params "
+            "with chartType, xKey, and non-empty yKey."
+        )
+
+    return None
 
 
 def data_source_payloads(items: list[WidgetDataRequest]) -> list[dict[str, Any]]:
@@ -465,6 +516,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Create a generated note, table, chart, or HTML widget.",
             "Requires widget_type from {note, table, chart, html}.",
+            GENERATIVE_WIDGET_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
         )
@@ -492,6 +544,13 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 "add_generative_widget",
                 "add_generative_widget requires widget_type from {note, table, chart, html}.",
             )
+        payload_error = validate_add_generative_widget_request(
+            widget_type=widget_type,
+            data=data,
+            chart_params=chart_params,
+        )
+        if payload_error:
+            return invalid_request("add_generative_widget", payload_error)
         return await run(
             AddGenerativeWidgetCommand(
                 command="add_generative_widget",

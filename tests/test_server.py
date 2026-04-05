@@ -17,6 +17,7 @@ from workspace_mcp.server import (
     data_source_payloads,
     invalid_request,
     param_options_payloads,
+    validate_add_generative_widget_request,
 )
 from workspace_mcp.state import BridgeSessionManager
 
@@ -236,3 +237,58 @@ def test_dashboard_scoped_commands_accept_omitted_dashboard_id() -> None:
     assert update_command.dashboard_id is None
     assert nav_command.dashboard_id is None
     assert generative_command.dashboard_id is None
+
+
+@pytest.mark.parametrize("widget_type", ["note", "html"])
+def test_generative_widget_validation_requires_string_for_text_widgets(
+    widget_type: str,
+) -> None:
+    """Text-like generative widgets should reject non-string data."""
+    message = validate_add_generative_widget_request(
+        widget_type=widget_type,
+        data=[{"body": "not allowed"}],
+        chart_params=None,
+    )
+
+    assert message == (
+        f"add_generative_widget with widget_type='{widget_type}' "
+        "requires string data."
+    )
+
+
+def test_generative_widget_validation_requires_list_data_for_table() -> None:
+    """Table widgets should reject string payloads."""
+    message = validate_add_generative_widget_request(
+        widget_type="table",
+        data="not a table",
+        chart_params=None,
+    )
+
+    assert message == (
+        "add_generative_widget with widget_type='table' requires data as list[dict]."
+    )
+
+
+def test_generative_widget_validation_requires_chart_params_for_chart() -> None:
+    """Chart widgets should reject incomplete chart configuration."""
+    message = validate_add_generative_widget_request(
+        widget_type="chart",
+        data=[{"quarter": "Q1", "value": 1}],
+        chart_params={"chartType": "bar", "xKey": "quarter"},
+    )
+
+    assert message == (
+        "add_generative_widget with widget_type='chart' requires chart_params "
+        "with chartType, xKey, and non-empty yKey."
+    )
+
+
+def test_generative_widget_validation_accepts_valid_chart_payload() -> None:
+    """Valid chart payloads should pass validation."""
+    message = validate_add_generative_widget_request(
+        widget_type="chart",
+        data=[{"quarter": "Q1", "value": 1}],
+        chart_params={"chartType": "bar", "xKey": "quarter", "yKey": ["value"]},
+    )
+
+    assert message is None
