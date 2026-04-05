@@ -1,59 +1,59 @@
 # OpenBB Workspace MCP
 
-Python 3.13+ sidecar that exposes a connected OpenBB Workspace browser session as a FastMCP server.
+Local Python 3.13+ sidecar that exposes a connected OpenBB Workspace browser session as an MCP server.
 
-Current design:
+What it does:
 
-- the sidecar keeps only session and in-flight request state
-- workspace state is fetched reactively from the browser when requested
-- the browser remains the source of truth for snapshots and command execution
-- bridge-local models handle sessions, websocket events, and command envelopes
-- canonical workspace payloads reuse `openbb_ai.models.WorkspaceState` and `AgentTool`
+- exposes a stateless streamable HTTP MCP endpoint at `/mcp`
+- accepts a localhost browser session at `/bridge/session/start` and `/bridge/ws`
+- forwards MCP tool calls to the connected Workspace tab over websocket
+- returns fresh workspace snapshots and command results from the browser
 
-Runtime surfaces:
-
-- streamable HTTP MCP endpoint at `/mcp`
-- browser session bootstrap endpoint at `/bridge/session/start`
-- browser websocket bridge at `/bridge/ws`
-- health endpoint at `/health`
-
-Current implementation slice:
-
-- end-to-end browser bridge works for:
-  - explicit browser connect from Workspace UI
-  - `get_workspace_snapshot`
-  - `create_widget`
-- the browser bridge now handles:
-  - CORS preflight for `POST /bridge/session/start`
-  - websocket session bootstrap and keepalive
-  - MCP client calls that send `wait_for_previous`
-- if Workspace has no active dashboard, `get_workspace_snapshot` returns
-  `current_dashboard_uuid = null` and exposes only global/available context
-
-Current flat MCP server surface:
+Current MCP surface:
 
 - `get_workspace_snapshot`
+- `get_widget_data`
+- `get_extra_widget_data`
+- `get_params_options`
 - `read_widget`
 - `create_widget`
+- `add_widget_to_dashboard`
 - `update_widget`
+- `update_widget_in_dashboard`
 - `delete_widget`
 - `manage_navigation_bar`
 - `add_generative_widget`
-
-Current limitation:
-
-- the Python sidecar exposes the full flat v1 tool list, but the current
-  `terminalpro` browser bridge slice only dispatches `get_workspace_snapshot`
-  and `create_widget`
-- the next frontend slice is to add browser handlers for:
-  - `read_widget`
-  - `update_widget`
-  - `delete_widget`
-  - `manage_navigation_bar`
-  - `add_generative_widget`
+- `assign_tasks_to_agents`
+- `execute_agent_tool`
+- `get_skill_content`
 
 Run locally:
 
 ```bash
 python -m workspace_mcp --host 127.0.0.1 --port 8787
 ```
+
+Reload on code changes:
+
+```bash
+python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
+```
+
+Practical usage rules:
+
+- call `get_workspace_snapshot` first
+- use snake_case payloads
+- for widget data calls, use `data_sources` items shaped like `{origin, widget_id, data_args, widget_uuid?, ssm_request?}`
+- for parameter option calls, use `param_options_queries` items shaped like `{origin, widget_id, param_name, data_args}`
+- omit `dashboard_id` to target the current dashboard route
+- do not invent placeholder dashboard ids like `active_dashboard`, `current_dashboard`, `null`, or `undefined`
+- `create_widget`, `update_widget`, `delete_widget`, `manage_navigation_bar`, and `add_generative_widget` operate on existing dashboards only
+- `manage_navigation_bar` manages the `navigation_bar` widget on an existing dashboard; if it does not exist yet, call `create` first
+- prefer `widget_uuid` for widget instance operations; `widget_id` is only a fallback when there is exactly one matching instance on the target dashboard
+
+Current scope:
+
+- localhost only
+- one connected Workspace browser session
+- flat tool list only
+- exploration mode deferred

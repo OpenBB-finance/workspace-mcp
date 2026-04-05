@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from openbb_ai.models import AgentTool, WorkspaceState
-from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter
 
 type BridgeErrorCode = Literal[
     "invalid_request",
@@ -16,6 +16,8 @@ type BridgeErrorCode = Literal[
 ]
 type NavigationOperation = Literal["create", "add_tabs", "remove_tabs", "rename_tabs"]
 type GenerativeWidgetType = Literal["note", "table", "chart", "html"]
+type BridgePayload = dict[str, Any]
+type BridgePayloadList = list[BridgePayload]
 
 
 def new_request_id() -> str:
@@ -56,7 +58,6 @@ class BrowserSession(Model):
     session_id: str
     token: str
     client_name: str
-    current_dashboard_id: str | None = None
 
 
 class BrowserSessionStartResponse(Model):
@@ -92,13 +93,84 @@ class WorkspaceWidgetConfig(Model):
     ui_args: dict[str, Any] | None = None
 
 
+class WidgetDataRequest(Model):
+    """Canonical MCP request item for widget-data tools.
+
+    This shape intentionally matches the snapshot vocabulary so agents can
+    reuse ``origin``, ``widget_id``, and ``params``/``data_args`` without
+    translating into Ada's internal ``id`` and ``input_args`` names.
+    """
+
+    origin: str = Field(validation_alias=AliasChoices("origin", "backend_name"))
+    widget_id: str
+    data_args: dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices(
+            "data_args",
+            "params",
+            "input_args",
+            "dataArgs",
+            "inputArgs",
+        ),
+    )
+    widget_uuid: str | None = None
+    ssm_request: dict[str, Any] | None = None
+
+
+class ParamOptionsRequest(Model):
+    """Canonical MCP request item for parameter-options queries.
+
+    The agent uses the snapshot's widget and param names directly, while the
+    sidecar translates the request into the browser's existing Ada path.
+    """
+
+    origin: str = Field(validation_alias=AliasChoices("origin", "backend_name"))
+    widget_id: str
+    param_name: str
+    data_args: dict[str, Any] = Field(
+        default_factory=dict,
+        validation_alias=AliasChoices(
+            "data_args",
+            "params",
+            "options_endpoint_input_args",
+            "dataArgs",
+            "optionsEndpointInputArgs",
+        ),
+    )
+
+
+class GetWidgetDataCommand(Model):
+    """Fetch primary widget data from Workspace data sources."""
+
+    command: Literal["get_widget_data"]
+    request_id: str | None = None
+    data_sources: BridgePayloadList = Field(default_factory=list)
+
+
+class GetExtraWidgetDataCommand(Model):
+    """Fetch extra widget data from Workspace data sources."""
+
+    command: Literal["get_extra_widget_data"]
+    request_id: str | None = None
+    data_sources: BridgePayloadList = Field(default_factory=list)
+
+
+class GetParamOptionsCommand(Model):
+    """Fetch parameter options for widget input arguments."""
+
+    command: Literal["get_params_options"]
+    request_id: str | None = None
+    param_options_queries: BridgePayloadList = Field(default_factory=list)
+
+
 class ReadWidgetCommand(Model):
     """Read one widget from the active dashboard."""
 
     command: Literal["read_widget"]
     request_id: str | None = None
     dashboard_id: str | None = None
-    widget_uuid: str
+    widget_uuid: str | None = None
+    widget_id: str | None = None
 
 
 class CreateWidgetCommand(Model):
@@ -106,7 +178,7 @@ class CreateWidgetCommand(Model):
 
     command: Literal["create_widget"]
     request_id: str | None = None
-    dashboard_id: str
+    dashboard_id: str | None = None
     backend_name: str
     widget_id: str
     config: WorkspaceWidgetConfig | None = None
@@ -117,8 +189,9 @@ class UpdateWidgetCommand(Model):
 
     command: Literal["update_widget"]
     request_id: str | None = None
-    dashboard_id: str
-    widget_uuid: str
+    dashboard_id: str | None = None
+    widget_uuid: str | None = None
+    widget_id: str | None = None
     config: WorkspaceWidgetConfig
 
 
@@ -127,8 +200,9 @@ class DeleteWidgetCommand(Model):
 
     command: Literal["delete_widget"]
     request_id: str | None = None
-    dashboard_id: str
-    widget_uuid: str
+    dashboard_id: str | None = None
+    widget_uuid: str | None = None
+    widget_id: str | None = None
 
 
 class ManageNavigationBarCommand(Model):
@@ -136,7 +210,7 @@ class ManageNavigationBarCommand(Model):
 
     command: Literal["manage_navigation_bar"]
     request_id: str | None = None
-    dashboard_id: str
+    dashboard_id: str | None = None
     operation: NavigationOperation
     tabs: list[dict[str, Any]] = Field(default_factory=list)
     rename_map: dict[str, str] = Field(default_factory=dict)
@@ -147,13 +221,40 @@ class AddGenerativeWidgetCommand(Model):
 
     command: Literal["add_generative_widget"]
     request_id: str | None = None
-    dashboard_id: str
+    dashboard_id: str | None = None
     widget_type: GenerativeWidgetType
     data: list[dict[str, Any]] | str | None = None
     name: str | None = None
     description: str | None = None
     chart_params: dict[str, Any] | None = None
     inner_tab: str | None = None
+
+
+class AssignTasksToAgentsCommand(Model):
+    """Delegate tasks to configured external agents."""
+
+    command: Literal["assign_tasks_to_agents"]
+    request_id: str | None = None
+    task_requests: BridgePayloadList = Field(default_factory=list)
+
+
+class ExecuteAgentToolCommand(Model):
+    """Execute one MCP tool through Workspace's agent-tool executor."""
+
+    command: Literal["execute_agent_tool"]
+    request_id: str | None = None
+    server_id: str
+    tool_name: str
+    parameters: BridgePayload = Field(default_factory=dict)
+
+
+class GetSkillContentCommand(Model):
+    """Load one skill body from the Workspace skill library."""
+
+    command: Literal["get_skill_content"]
+    request_id: str | None = None
+    slug: str
+    reason: str | None = None
 
 
 class GetWorkspaceSnapshotCommand(Model):
@@ -164,12 +265,18 @@ class GetWorkspaceSnapshotCommand(Model):
 
 
 type WorkspaceCommand = Annotated[
-    ReadWidgetCommand
+    GetWidgetDataCommand
+    | GetExtraWidgetDataCommand
+    | GetParamOptionsCommand
+    | ReadWidgetCommand
     | CreateWidgetCommand
     | UpdateWidgetCommand
     | DeleteWidgetCommand
     | ManageNavigationBarCommand
     | AddGenerativeWidgetCommand
+    | AssignTasksToAgentsCommand
+    | ExecuteAgentToolCommand
+    | GetSkillContentCommand
     | GetWorkspaceSnapshotCommand,
     Field(discriminator="command"),
 ]

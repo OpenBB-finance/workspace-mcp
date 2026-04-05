@@ -77,7 +77,6 @@ class BridgeSessionManager:
                 session_id=str(uuid4()),
                 token=str(uuid4()),
                 client_name=request.client_name,
-                current_dashboard_id=request.current_dashboard_id,
             )
             self._browser = ConnectedBrowser(session=session)
             self._fail_pending_commands(
@@ -109,12 +108,15 @@ class BridgeSessionManager:
             browser.socket = socket
             return browser.session
 
-    async def disconnect_browser(self) -> None:
+    async def disconnect_browser(self, *, session_id: str | None = None) -> None:
         """Detach the current browser websocket and fail pending commands."""
         async with self._lock:
-            if self._browser is None:
+            browser = self._browser
+            if browser is None:
                 return
-            self._browser.socket = None
+            if session_id and browser.session.session_id != session_id:
+                return
+            browser.socket = None
             self._fail_pending_commands(
                 self._error(
                     code="unavailable",
@@ -177,9 +179,6 @@ class BridgeSessionManager:
             return {
                 "ok": True,
                 "browser_connected": bool(browser and browser.socket),
-                "current_dashboard_id": (
-                    browser.session.current_dashboard_id if browser else None
-                ),
                 "pending_commands": len(self._pending_commands),
             }
 
@@ -242,20 +241,7 @@ class BridgeSessionManager:
                 details={"errors": error.errors()},
             )
 
-        await self._update_current_dashboard(snapshot)
         return result.model_copy(update={"data": snapshot.model_dump(mode="json")})
-
-    async def _update_current_dashboard(self, snapshot: WorkspaceSnapshot) -> None:
-        dashboard_id = (
-            snapshot.workspace_state and snapshot.workspace_state.current_dashboard_uuid
-        )
-        if not dashboard_id:
-            return
-
-        async with self._lock:
-            if self._browser is None:
-                return
-            self._browser.session.current_dashboard_id = str(dashboard_id)
 
     @staticmethod
     def _error(

@@ -24,14 +24,18 @@ LOCALHOST_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
 
 def create_app(settings: Settings | None = None) -> Starlette:
     """Create the ASGI application hosting MCP and browser bridge endpoints."""
-    settings = settings or Settings()
+    settings = settings or Settings.from_env()
     state = BridgeSessionManager(
         base_url=settings.base_url,
         websocket_path=settings.websocket_path,
         command_timeout_seconds=settings.command_timeout_seconds,
     )
     mcp = create_mcp_server(state)
-    app = mcp.http_app(path=settings.mcp_path, transport="streamable-http")
+    app = mcp.http_app(
+        path=settings.mcp_path,
+        transport="streamable-http",
+        stateless_http=True,
+    )
     app.add_middleware(
         CORSMiddleware,
         allow_origin_regex=LOCALHOST_ORIGIN_REGEX,
@@ -81,7 +85,7 @@ def create_app(settings: Settings | None = None) -> Starlette:
         except WebSocketDisconnect:
             pass
         finally:
-            await state.disconnect_browser()
+            await state.disconnect_browser(session_id=session_id)
             with contextlib.suppress(RuntimeError):
                 await websocket.close()
 

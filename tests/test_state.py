@@ -140,6 +140,149 @@ async def test_execute_command_round_trip(
     assert result.data == {"widget_uuid": "widget-1"}
 
 
+@pytest.mark.asyncio
+async def test_execute_agent_tool_round_trip(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Agent-tool commands should forward structured payloads unchanged."""
+    socket = await connect_browser(bridge_manager)
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command(
+            {
+                "command": "execute_agent_tool",
+                "server_id": "docs",
+                "tool_name": "docs_search",
+                "parameters": {"query": "workspace mcp"},
+            }
+        )
+    )
+
+    await asyncio.sleep(0)
+    command = socket.messages[0]["command"]
+    request_id = command["request_id"]
+
+    assert command["server_id"] == "docs"
+    assert command["tool_name"] == "docs_search"
+    assert command["parameters"] == {"query": "workspace mcp"}
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=True,
+                command="execute_agent_tool",
+                request_id=request_id,
+                message="Tool executed.",
+                data={"items": [{"content": "result"}]},
+            ).model_dump(mode="json"),
+        }
+    )
+
+    result = await task
+    assert result.ok is True
+    assert result.data == {"items": [{"content": "result"}]}
+
+
+@pytest.mark.asyncio
+async def test_read_widget_accepts_widget_id_alias(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Widget-instance commands should preserve widget_id aliases for the browser."""
+    socket = await connect_browser(bridge_manager)
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command(
+            {
+                "command": "read_widget",
+                "dashboard_id": "dashboard-1",
+                "widget_id": "price_history",
+            }
+        )
+    )
+
+    await asyncio.sleep(0)
+    command = socket.messages[0]["command"]
+    request_id = command["request_id"]
+
+    assert command["widget_id"] == "price_history"
+    assert command["widget_uuid"] is None
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=True,
+                command="read_widget",
+                request_id=request_id,
+                message="Widget loaded.",
+                data={"widget_uuid": "widget-instance-1"},
+            ).model_dump(mode="json"),
+        }
+    )
+
+    result = await task
+    assert result.ok is True
+    assert result.data == {"widget_uuid": "widget-instance-1"}
+
+
+@pytest.mark.asyncio
+async def test_stale_disconnect_does_not_drop_replacement_browser(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Closing an old websocket should not mark the replacement browser offline."""
+    first_session = await bridge_manager.start_session(BrowserSessionStartRequest())
+    first_socket = FakeSocket()
+    await bridge_manager.connect_browser(
+        session_id=first_session.session.session_id,
+        token=first_session.session.token,
+        socket=first_socket,
+    )
+
+    replacement_session = await bridge_manager.start_session(BrowserSessionStartRequest())
+    replacement_socket = FakeSocket()
+    await bridge_manager.connect_browser(
+        session_id=replacement_session.session.session_id,
+        token=replacement_session.session.token,
+        socket=replacement_socket,
+    )
+
+    await bridge_manager.disconnect_browser(session_id=first_session.session.session_id)
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command({"command": "get_workspace_snapshot"})
+    )
+    await asyncio.sleep(0)
+
+    request_id = replacement_socket.messages[0]["command"]["request_id"]
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=True,
+                command="get_workspace_snapshot",
+                request_id=request_id,
+                message="Workspace snapshot retrieved.",
+                data={
+                    "generated_at": 1,
+                    "workspace_state": None,
+                    "workspace_options": [],
+                    "widgets": {"primary": [], "secondary": [], "extra": []},
+                    "context": [],
+                    "artifacts": [],
+                    "files": [],
+                    "tools": [],
+                    "skills": [],
+                },
+            ).model_dump(mode="json"),
+        }
+    )
+
+    result = await task
+
+    assert result.ok is True
+
+
 async def connect_browser(bridge_manager: BridgeSessionManager) -> FakeSocket:
     """Start a bridge session and attach a fake browser socket."""
     session = await bridge_manager.start_session(BrowserSessionStartRequest())

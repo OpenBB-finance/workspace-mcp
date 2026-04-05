@@ -1,11 +1,12 @@
 """CLI entrypoint for the Workspace MCP sidecar."""
 
 import argparse
+import os
 
 import uvicorn
 
 from workspace_mcp.app import create_app
-from workspace_mcp.config import Settings
+from workspace_mcp.config import ENV_PREFIX, Settings
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +41,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=15.0,
         help="Seconds to wait for one browser command result.",
     )
+    parser.add_argument(
+        "-r", "--reload", action="store_true", help="Enable hot reload on code changes"
+    )
     return parser
 
 
@@ -53,6 +57,27 @@ def main() -> None:
         mcp_path=args.mcp_path,
         command_timeout_seconds=args.command_timeout_seconds,
     )
+    if args.reload:
+        for key, value in {
+            "HOST": settings.host,
+            "PORT": settings.port,
+            "MCP_PATH": settings.mcp_path,
+            "HEALTH_PATH": settings.health_path,
+            "SESSION_START_PATH": settings.session_start_path,
+            "WEBSOCKET_PATH": settings.websocket_path,
+            "COMMAND_TIMEOUT_SECONDS": settings.command_timeout_seconds,
+        }.items():
+            os.environ[f"{ENV_PREFIX}{key}"] = str(value)
+
+        uvicorn.run(
+            "workspace_mcp.app:create_app",
+            host=settings.host,
+            port=settings.port,
+            reload=True,
+            factory=True,
+        )
+        return
+
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
 
 
