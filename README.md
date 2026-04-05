@@ -39,18 +39,6 @@ Reload on code changes:
 python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
 ```
 
-Practical usage rules:
-
-- call `get_workspace_snapshot` first
-- use snake_case payloads
-- for widget data calls, use `data_sources` items shaped like `{origin, widget_id, data_args, widget_uuid?, ssm_request?}`
-- for parameter option calls, use `param_options_queries` items shaped like `{origin, widget_id, param_name, data_args}`
-- omit `dashboard_id` to target the current dashboard route
-- do not invent placeholder dashboard ids like `active_dashboard`, `current_dashboard`, `null`, or `undefined`
-- `create_widget`, `update_widget`, `delete_widget`, `manage_navigation_bar`, and `add_generative_widget` operate on existing dashboards only
-- `manage_navigation_bar` manages the `navigation_bar` widget on an existing dashboard; if it does not exist yet, call `create` first
-- prefer `widget_uuid` for widget instance operations; `widget_id` is only a fallback when there is exactly one matching instance on the target dashboard
-
 Current scope:
 
 - localhost only
