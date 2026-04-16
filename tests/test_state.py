@@ -4,7 +4,6 @@ import asyncio
 from uuid import UUID
 
 import pytest
-from openbb_ai.models import AgentTool
 
 from workspace_mcp.models import (
     BrowserSessionStartRequest,
@@ -75,18 +74,49 @@ async def test_get_workspace_snapshot_round_trip(
                         ),
                     },
                     "workspace_options": ["mcp-tools"],
-                    "widgets": {"primary": [], "secondary": [], "extra": []},
-                    "context": [],
-                    "artifacts": [],
-                    "files": [],
-                    "tools": [
-                        AgentTool(
-                            server_id="local-docs",
-                            name="search_docs",
-                            url="http://127.0.0.1:5050/mcp",
-                        ).model_dump(mode="json")
+                    "dashboards": [
+                        {
+                            "dashboard_id": "dashboard-1",
+                            "name": "Macro",
+                            "is_active": True,
+                            "widget_count": 1,
+                            "tab_count": 1,
+                        }
                     ],
-                    "skills": [],
+                    "dashboard_composition": {
+                        "id": "dashboard-1",
+                        "name": "Macro",
+                        "current_tab_id": "__no_tab__",
+                        "current_tab_name": "__no_tab__",
+                        "tabs": [
+                            {
+                                "tab_id": "__no_tab__",
+                                "tab_name": "__no_tab__",
+                                "widgets": [
+                                    {
+                                        "widget_uuid": "widget-1",
+                                        "name": "Market Snapshot",
+                                    }
+                                ],
+                                "layout": [
+                                    {
+                                        "widget_uuid": "widget-1",
+                                        "x": 0,
+                                        "y": 0,
+                                        "w": 40,
+                                        "h": 12,
+                                    }
+                                ],
+                            }
+                        ],
+                        "groups": [],
+                    },
+                    "skills": [
+                        {
+                            "slug": "macro-research",
+                            "name": "Macro Research",
+                        }
+                    ],
                 },
             ).model_dump(mode="json"),
         }
@@ -98,7 +128,10 @@ async def test_get_workspace_snapshot_round_trip(
     assert result.command == "get_workspace_snapshot"
     assert isinstance(result.data, dict)
     assert result.data["workspace_state"]["current_page_context"] == "dashboard"
-    assert result.data["tools"][0]["name"] == "search_docs"
+    assert result.data["dashboards"][0]["dashboard_id"] == "dashboard-1"
+    assert result.data["dashboard_composition"]["tabs"][0]["layout"][0]["w"] == 40
+    assert result.data["skills"][0]["slug"] == "macro-research"
+    assert "tools" not in result.data
 
 
 @pytest.mark.asyncio
@@ -138,6 +171,56 @@ async def test_execute_command_round_trip(
     result = await task
     assert result.ok is True
     assert result.data == {"widget_uuid": "widget-1"}
+
+
+@pytest.mark.asyncio
+async def test_invalid_browser_payload_fails_pending_command_without_disconnect(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Malformed browser frames should fail commands without tearing down the session."""
+    socket = await connect_browser(bridge_manager)
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command({"command": "list_available_widgets"})
+    )
+
+    await asyncio.sleep(0)
+    request_id = socket.messages[0]["command"]["request_id"]
+
+    await bridge_manager.handle_browser_message({"type": "command_result"})
+
+    result = await task
+    assert result.ok is False
+    assert result.command == "list_available_widgets"
+    assert result.request_id == request_id
+    assert result.error is not None
+    assert result.error.code == "invalid_request"
+    assert "invalid websocket payload" in result.message
+
+    follow_up_task = asyncio.create_task(
+        bridge_manager.execute_command({"command": "get_workspace_snapshot"})
+    )
+
+    await asyncio.sleep(0)
+    follow_up_request_id = socket.messages[1]["command"]["request_id"]
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=True,
+                command="get_workspace_snapshot",
+                request_id=follow_up_request_id,
+                message="Workspace snapshot retrieved.",
+                data={
+                    "generated_at": 1,
+                    "workspace_state": None,
+                },
+            ).model_dump(mode="json"),
+        }
+    )
+
+    follow_up_result = await follow_up_task
+    assert follow_up_result.ok is True
 
 
 @pytest.mark.asyncio
@@ -266,13 +349,6 @@ async def test_stale_disconnect_does_not_drop_replacement_browser(
                 data={
                     "generated_at": 1,
                     "workspace_state": None,
-                    "workspace_options": [],
-                    "widgets": {"primary": [], "secondary": [], "extra": []},
-                    "context": [],
-                    "artifacts": [],
-                    "files": [],
-                    "tools": [],
-                    "skills": [],
                 },
             ).model_dump(mode="json"),
         }

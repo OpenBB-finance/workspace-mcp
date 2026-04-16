@@ -5,6 +5,7 @@ import pytest
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     CreateWidgetCommand,
+    GetWidgetSchemaCommand,
     ManageNavigationBarCommand,
     ParamOptionsRequest,
     UpdateWidgetCommand,
@@ -16,6 +17,7 @@ from workspace_mcp.server import (
     create_mcp_server,
     data_source_payloads,
     invalid_request,
+    is_generative_only_widget,
     param_options_payloads,
     validate_add_generative_widget_request,
 )
@@ -41,6 +43,24 @@ async def test_workspace_tool_usage_prompt_is_registered() -> None:
     )
     assert "get_workspace_snapshot" in SERVER_INSTRUCTIONS
     assert "{origin, widget_id, data_args" in SERVER_INSTRUCTIONS
+    assert "Do not use create_widget for rich_note" in SERVER_INSTRUCTIONS
+    assert "The grid is 40 columns wide" in SERVER_INSTRUCTIONS
+    assert "grid_data defaults and min/max layout constraints" in SERVER_INSTRUCTIONS
+    assert "deterministic plain-create subset" in SERVER_INSTRUCTIONS
+    assert "requires_options_lookup=true" in SERVER_INSTRUCTIONS
+    assert "dashboard_id, dashboard_composition, and skills" in SERVER_INSTRUCTIONS
+    assert "Pass data_sources as a native array, not a JSON string" in SERVER_INSTRUCTIONS
+    assert "param_options_queries as a native array, not a JSON string" in SERVER_INSTRUCTIONS
+    assert "pass origin as the exact catalog value returned by list_available_widgets" in SERVER_INSTRUCTIONS
+    assert "use that UUID for layout changes" in SERVER_INSTRUCTIONS
+    assert "Never use a widget title or generic widget type" in SERVER_INSTRUCTIONS
+
+
+def test_get_widget_schema_command_accepts_missing_origin_for_tool_error() -> None:
+    """Missing origin should reach the tool handler so it can fail explicitly."""
+    command = GetWidgetSchemaCommand(command="get_widget_schema", widget_id="price")
+
+    assert command.origin is None
 
 
 def test_data_source_payloads_translate_snapshot_names() -> None:
@@ -162,6 +182,12 @@ def test_invalid_request_builds_standard_tool_error() -> None:
     }
 
 
+def test_is_generative_only_widget_identifies_rich_note() -> None:
+    """rich_note should stay on the generative widget path only."""
+    assert is_generative_only_widget("rich_note") is True
+    assert is_generative_only_widget("market_indices") is False
+
+
 def test_param_options_payloads_accept_backend_name_alias() -> None:
     """The MCP layer should accept backend_name for param-option queries too."""
     payloads = param_options_payloads(
@@ -237,6 +263,19 @@ def test_dashboard_scoped_commands_accept_omitted_dashboard_id() -> None:
     assert update_command.dashboard_id is None
     assert nav_command.dashboard_id is None
     assert generative_command.dashboard_id is None
+
+
+def test_create_widget_command_accepts_origin_alias() -> None:
+    """The MCP layer should accept origin for create-widget identity too."""
+    command = CreateWidgetCommand.model_validate(
+        {
+            "command": "create_widget",
+            "origin": "OpenBB Sandbox",
+            "widget_id": "price_performance",
+        }
+    )
+
+    assert command.backend_name == "OpenBB Sandbox"
 
 
 @pytest.mark.parametrize("widget_type", ["note", "html"])
