@@ -1,13 +1,38 @@
 # OpenBB Workspace MCP
 
-Local Python 3.13+ sidecar that exposes a connected OpenBB Workspace browser session as an MCP server.
+OpenBB Workspace Companion App that exposes the connected browser session as an MCP server.
 
 What it does:
 
 - exposes a stateless streamable HTTP MCP endpoint at `/mcp`
-- accepts a localhost browser session at `/bridge/session/start` and `/bridge/ws`
 - forwards MCP tool calls to the connected Workspace tab over websocket
 - returns fresh workspace snapshots and command results from the browser
+
+## Connect from Workspace
+
+- open OpenBB Workspace
+- go to the AI Agents tab
+- find `Workspace MCP Companion`
+- set the companion base URL to your sidecar URL, for example `http://127.0.0.1:8787` for local development or `https://mcp.example.com` for a remote deployment
+- connect the companion after the sidecar is running
+
+## Connect your AI agent
+
+Use the `http://127.0.0.1:8787/mcp` as the MCP url that you pass into the `mcp add` command of your agent.
+
+Example `.mcp.json` for claude code:
+
+```json
+{
+  "mcpServers": {
+    "workspace_mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp"
+    }
+}
+```
+
+## Features
 
 Current MCP surface:
 
@@ -30,22 +55,6 @@ Current MCP surface:
 - `execute_agent_tool`
 - `get_skill_content`
 
-Authoring support:
-
-- widget discovery is available through `list_available_widgets` and `get_widget_schema`
-- `list_available_widgets` only returns the deterministic plain-create subset
-- widget catalog entries include the `origin`/`backend_name` identity to reuse in schema and create calls
-- `get_widget_schema` includes `grid_data` when widget layout defaults or min/max constraints are defined
-- `get_widget_schema` marks lookup-backed params with `requires_options_lookup`; agents should call `get_params_options` before using those params
-- rich text notes are created through `add_generative_widget` with `widget_type='note'`, not `create_widget`
-- some widgets that still require runtime-only bootstrap are intentionally excluded from `create_widget`
-- dashboard creation and rename are available through `create_dashboard` and `update_dashboard`
-- `get_workspace_snapshot` is compact by default and includes current dashboard composition, workspace dashboard summaries, and skills
-- dashboard composition can be inspected through `get_workspace_snapshot` and `read_dashboard`
-- visible widget placement is controlled through `update_dashboard_layout` on a 40-column grid
-- dashboard tabs remain managed through `manage_navigation_bar`
-- `update_widget` is limited to widget-instance config changes
-
 Run locally:
 
 ```bash
@@ -58,9 +67,13 @@ Reload on code changes:
 python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
 ```
 
+Browser security:
+
+- `http` is fine for local deployments (`localhost`/`127.0.0.1`)
+- for any non-local deployment, use `https`; browsers will block insecure `http` sidecar requests from a secure Workspace origin
+
 Current scope:
 
-- localhost only
+- single user
 - one connected Workspace browser session
-- flat tool list only
-- exploration mode deferred
+- flat tool list
