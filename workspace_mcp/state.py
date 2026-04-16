@@ -258,7 +258,13 @@ class BridgeSessionManager:
                 details={"errors": error.errors()},
             )
 
-        return result.model_copy(update={"data": snapshot.model_dump(mode="json")})
+        return result.model_copy(
+            update={
+                "data": snapshot.model_dump(
+                    mode="json", exclude_defaults=True, exclude_none=True
+                )
+            }
+        )
 
     @staticmethod
     def _error(

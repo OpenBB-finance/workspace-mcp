@@ -4,7 +4,6 @@ import asyncio
 from uuid import UUID
 
 import pytest
-from openbb_ai.models import AgentTool
 
 from workspace_mcp.models import (
     BrowserSessionStartRequest,
@@ -75,6 +74,15 @@ async def test_get_workspace_snapshot_round_trip(
                         ),
                     },
                     "workspace_options": ["mcp-tools"],
+                    "dashboards": [
+                        {
+                            "dashboard_id": "dashboard-1",
+                            "name": "Macro",
+                            "is_active": True,
+                            "widget_count": 1,
+                            "tab_count": 1,
+                        }
+                    ],
                     "dashboard_composition": {
                         "id": "dashboard-1",
                         "name": "Macro",
@@ -103,18 +111,12 @@ async def test_get_workspace_snapshot_round_trip(
                         ],
                         "groups": [],
                     },
-                    "widgets": {"primary": [], "secondary": [], "extra": []},
-                    "context": [],
-                    "artifacts": [],
-                    "files": [],
-                    "tools": [
-                        AgentTool(
-                            server_id="local-docs",
-                            name="search_docs",
-                            url="http://127.0.0.1:5050/mcp",
-                        ).model_dump(mode="json")
+                    "skills": [
+                        {
+                            "slug": "macro-research",
+                            "name": "Macro Research",
+                        }
                     ],
-                    "skills": [],
                 },
             ).model_dump(mode="json"),
         }
@@ -126,8 +128,10 @@ async def test_get_workspace_snapshot_round_trip(
     assert result.command == "get_workspace_snapshot"
     assert isinstance(result.data, dict)
     assert result.data["workspace_state"]["current_page_context"] == "dashboard"
+    assert result.data["dashboards"][0]["dashboard_id"] == "dashboard-1"
     assert result.data["dashboard_composition"]["tabs"][0]["layout"][0]["w"] == 40
-    assert result.data["tools"][0]["name"] == "search_docs"
+    assert result.data["skills"][0]["slug"] == "macro-research"
+    assert "tools" not in result.data
 
 
 @pytest.mark.asyncio
@@ -210,13 +214,6 @@ async def test_invalid_browser_payload_fails_pending_command_without_disconnect(
                 data={
                     "generated_at": 1,
                     "workspace_state": None,
-                    "workspace_options": [],
-                    "widgets": {"primary": [], "secondary": [], "extra": []},
-                    "context": [],
-                    "artifacts": [],
-                    "files": [],
-                    "tools": [],
-                    "skills": [],
                 },
             ).model_dump(mode="json"),
         }
@@ -352,13 +349,6 @@ async def test_stale_disconnect_does_not_drop_replacement_browser(
                 data={
                     "generated_at": 1,
                     "workspace_state": None,
-                    "workspace_options": [],
-                    "widgets": {"primary": [], "secondary": [], "extra": []},
-                    "context": [],
-                    "artifacts": [],
-                    "files": [],
-                    "tools": [],
-                    "skills": [],
                 },
             ).model_dump(mode="json"),
         }

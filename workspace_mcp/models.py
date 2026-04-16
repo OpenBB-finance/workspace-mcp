@@ -78,6 +78,7 @@ class WorkspaceSnapshot(Model):
     generated_at: int
     workspace_state: WorkspaceState | None = None
     workspace_options: list[str] = Field(default_factory=list)
+    dashboards: list[dict[str, Any]] = Field(default_factory=list)
     dashboard_composition: dict[str, Any] | None = None
     widgets: dict[str, list[dict[str, Any]]] = Field(default_factory=widget_groups)
     context: list[dict[str, Any]] = Field(default_factory=list)
@@ -161,7 +162,7 @@ class GetWidgetSchemaCommand(Model):
 
     command: Literal["get_widget_schema"]
     request_id: str | None = None
-    origin: str
+    origin: str | None = None
     widget_id: str
 
 
@@ -189,7 +190,7 @@ class CreateWidgetCommand(Model):
     command: Literal["create_widget"]
     request_id: str | None = None
     dashboard_id: str | None = None
-    backend_name: str
+    backend_name: str = Field(validation_alias=AliasChoices("backend_name", "origin"))
     widget_id: str
     config: WorkspaceWidgetConfig | None = None
 

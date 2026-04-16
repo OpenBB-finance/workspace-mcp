@@ -33,9 +33,16 @@ Current MCP surface:
 Authoring support:
 
 - widget discovery is available through `list_available_widgets` and `get_widget_schema`
+- `list_available_widgets` only returns the deterministic plain-create subset
+- widget catalog entries include the `origin`/`backend_name` identity to reuse in schema and create calls
+- `get_widget_schema` includes `grid_data` when widget layout defaults or min/max constraints are defined
+- `get_widget_schema` marks lookup-backed params with `requires_options_lookup`; agents should call `get_params_options` before using those params
+- rich text notes are created through `add_generative_widget` with `widget_type='note'`, not `create_widget`
+- some widgets that still require runtime-only bootstrap are intentionally excluded from `create_widget`
 - dashboard creation and rename are available through `create_dashboard` and `update_dashboard`
+- `get_workspace_snapshot` is compact by default and includes current dashboard composition, workspace dashboard summaries, and skills
 - dashboard composition can be inspected through `get_workspace_snapshot` and `read_dashboard`
-- visible widget placement is controlled through `update_dashboard_layout`
+- visible widget placement is controlled through `update_dashboard_layout` on a 40-column grid
 - dashboard tabs remain managed through `manage_navigation_bar`
 - `update_widget` is limited to widget-instance config changes
 
