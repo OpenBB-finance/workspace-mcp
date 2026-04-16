@@ -12,20 +12,32 @@ What it does:
 Current MCP surface:
 
 - `get_workspace_snapshot`
+- `list_available_widgets`
+- `get_widget_schema`
 - `get_widget_data`
-- `get_extra_widget_data`
 - `get_params_options`
+- `create_dashboard`
+- `read_dashboard`
+- `update_dashboard`
+- `update_dashboard_layout`
 - `read_widget`
 - `create_widget`
-- `add_widget_to_dashboard`
 - `update_widget`
-- `update_widget_in_dashboard`
 - `delete_widget`
 - `manage_navigation_bar`
 - `add_generative_widget`
 - `assign_tasks_to_agents`
 - `execute_agent_tool`
 - `get_skill_content`
+
+Authoring support:
+
+- widget discovery is available through `list_available_widgets` and `get_widget_schema`
+- dashboard creation and rename are available through `create_dashboard` and `update_dashboard`
+- dashboard composition can be inspected through `get_workspace_snapshot` and `read_dashboard`
+- visible widget placement is controlled through `update_dashboard_layout`
+- dashboard tabs remain managed through `manage_navigation_bar`
+- `update_widget` is limited to widget-instance config changes
 
 Run locally:
 

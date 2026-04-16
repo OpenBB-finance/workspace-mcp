@@ -7,16 +7,21 @@ from fastmcp import FastMCP
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     AssignTasksToAgentsCommand,
+    CreateDashboardCommand,
     CreateWidgetCommand,
     DeleteWidgetCommand,
     ExecuteAgentToolCommand,
-    GetExtraWidgetDataCommand,
     GetParamOptionsCommand,
     GetSkillContentCommand,
     GetWidgetDataCommand,
+    GetWidgetSchemaCommand,
+    ListAvailableWidgetsCommand,
     ManageNavigationBarCommand,
     ParamOptionsRequest,
+    ReadDashboardCommand,
     ReadWidgetCommand,
+    UpdateDashboardLayoutCommand,
+    UpdateDashboardCommand,
     UpdateWidgetCommand,
     WidgetDataRequest,
     WorkspaceWidgetConfig,
@@ -33,10 +38,8 @@ USAGE_SUMMARY = (
     "Workspace session. Do not invent identifiers."
 )
 WIDGET_SCHEMA_GUIDANCE = (
-    "The workspace snapshot already includes widget metadata. Each widget entry in "
-    "widgets.primary, widgets.secondary, and widgets.extra contains origin, "
-    "widget_id, uuid, description, and params. Use those fields as the source of "
-    "truth for widget input names and supported options."
+    "Use list_available_widgets to enumerate candidates and get_widget_schema to "
+    "inspect one exact widget contract before creating it."
 )
 DATA_SOURCE_SHAPE = (
     "Use data_sources items shaped like {origin, widget_id, data_args, "
@@ -62,18 +65,29 @@ DASHBOARD_TARGETING_GUIDANCE = (
 EXISTING_DASHBOARD_GUIDANCE = (
     "These tools operate on an existing dashboard only. They do not create dashboards."
 )
+CREATE_DASHBOARD_GUIDANCE = (
+    "Use create_dashboard to create a dashboard first. By default it activates the "
+    "new dashboard route so follow-up snapshot and widget commands target it."
+)
+LAYOUT_GUIDANCE = (
+    "Visible placement is controlled by dashboard composition, not update_widget. "
+    "Use read_dashboard or get_workspace_snapshot.dashboard_composition to inspect "
+    "tabs and layout, then use update_dashboard_layout for x, y, w, h, and tab_id."
+)
 NAVIGATION_BAR_GUIDANCE = (
     "manage_navigation_bar manages the navigation_bar widget inside an existing dashboard. "
     "If the dashboard does not already have a navigation_bar widget, call create first. "
     "Its create operation creates or initializes navigation tabs on that dashboard; it does not create a dashboard."
 )
 DISCOVERY_WORKFLOW = (
-    "Recommended workflow: call get_workspace_snapshot, inspect the target widget's "
-    "origin, widget_id, and params, call get_params_options for params marked with "
-    "get_options when you need valid dynamic values, then call get_widget_data or "
-    "get_extra_widget_data using origin, widget_id, and a matching data_args object. "
-    "Use get_extra_widget_data for discovery or search widgets first, then "
-    "feed the returned identifiers into get_widget_data for detail widgets."
+    "Recommended workflow: call get_workspace_snapshot first, create_dashboard when "
+    "you need a fresh dashboard, call list_available_widgets to enumerate candidate "
+    "widgets, call get_widget_schema for the exact widget contract, call "
+    "get_params_options when a schema field requires dynamic options, then call "
+    "create_widget with explicit dashboard_id, widget identity, data_args, and "
+    "ui_args. Use read_dashboard or get_workspace_snapshot.dashboard_composition "
+    "to inspect visible layout and update_dashboard_layout to move or resize "
+    "widgets."
 )
 SERVER_INSTRUCTIONS = " ".join(
     [
@@ -85,6 +99,8 @@ SERVER_INSTRUCTIONS = " ".join(
         PARAM_OPTIONS_SHAPE,
         WIDGET_INSTANCE_GUIDANCE,
         DASHBOARD_TARGETING_GUIDANCE,
+        CREATE_DASHBOARD_GUIDANCE,
+        LAYOUT_GUIDANCE,
         DISCOVERY_WORKFLOW,
         (
             "Provide dashboard_id explicitly when operating on a dashboard other than "
@@ -121,6 +137,34 @@ def required_widget_config(
 def payload_list(items: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
     """Normalize list payloads so MCP callers can omit optional arrays."""
     return items or []
+
+
+def has_layout_ui_args(ui_args: dict[str, Any] | None) -> bool:
+    """Detect layout-oriented widget UI args that need the layout tool instead."""
+    if not isinstance(ui_args, dict):
+        return False
+
+    return any(
+        key in ui_args
+        for key in {
+            "x",
+            "y",
+            "w",
+            "h",
+            "min_w",
+            "min_h",
+            "max_w",
+            "max_h",
+            "minW",
+            "minH",
+            "maxW",
+            "maxH",
+            "grid_data",
+            "gridData",
+            "inner_tab",
+            "innerTab",
+        }
+    )
 
 
 def invalid_request(command: str, message: str) -> ToolResponse:
@@ -243,6 +287,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Request a fresh OpenBB Workspace snapshot from the connected browser.",
             "Call this first when you need valid dashboard, widget, tool, or skill identifiers.",
+            "dashboard_composition exposes deterministic tabs, layout coordinates, and groups for the current dashboard.",
         )
     )
     async def get_workspace_snapshot(
@@ -256,7 +301,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Fetch current data for one or more Workspace data sources.",
             DATA_SOURCE_SHAPE,
-            "Discover required input_args from the snapshot widget params first.",
+            "Only use this after selecting an exact widget identity and explicit data_args.",
         )
     )
     async def get_widget_data(
@@ -274,21 +319,41 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
 
     @server.tool(
         description=describe_tool(
-            "Fetch extra widget data for search-driven Workspace data sources.",
-            DATA_SOURCE_SHAPE,
-            "Use this for search or discovery widgets before calling get_widget_data on detail widgets.",
+            "List widgets available to the current Workspace session.",
+            "Returns deterministic widget identities for later get_widget_schema and create_widget calls.",
         )
     )
-    async def get_extra_widget_data(
-        data_sources: list[WidgetDataRequest],
+    async def list_available_widgets(
+        origin: str | None = None,
         wait_for_previous: bool | None = None,
     ) -> ToolResponse:
-        """Fetch extra widget data using the same browser-side path Ada uses."""
+        """List widgets that can be created in the current Workspace session."""
         _ = wait_for_previous
         return await run(
-            GetExtraWidgetDataCommand(
-                command="get_extra_widget_data",
-                data_sources=data_source_payloads(data_sources),
+            ListAvailableWidgetsCommand(
+                command="list_available_widgets",
+                origin=origin,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Fetch the exact schema for one available widget.",
+            "Pass origin and widget_id from list_available_widgets or the workspace snapshot.",
+        )
+    )
+    async def get_widget_schema(
+        origin: str,
+        widget_id: str,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Fetch one deterministic widget schema from the Workspace widget library."""
+        _ = wait_for_previous
+        return await run(
+            GetWidgetSchemaCommand(
+                command="get_widget_schema",
+                origin=origin,
+                widget_id=widget_id,
             )
         )
 
@@ -309,6 +374,77 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
             GetParamOptionsCommand(
                 command="get_params_options",
                 param_options_queries=param_options_payloads(param_options_queries),
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Create one dashboard in the local Workspace session.",
+            "Returns the new dashboard_id.",
+            "By default the browser activates the new dashboard route.",
+        )
+    )
+    async def create_dashboard(
+        name: str,
+        dashboard_id: str | None = None,
+        activate: bool = True,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Create a dashboard for deterministic authoring flows."""
+        _ = wait_for_previous
+        return await run(
+            CreateDashboardCommand(
+                command="create_dashboard",
+                name=name,
+                dashboard_id=dashboard_id,
+                activate=activate,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Update light metadata for one dashboard.",
+            "Currently supports dashboard rename via name.",
+        )
+    )
+    async def update_dashboard(
+        dashboard_id: str,
+        name: str | None = None,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Update light dashboard metadata."""
+        _ = wait_for_previous
+        if name is None:
+            return invalid_request(
+                "update_dashboard",
+                "update_dashboard currently requires name.",
+            )
+        return await run(
+            UpdateDashboardCommand(
+                command="update_dashboard",
+                dashboard_id=dashboard_id,
+                name=name,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Read one dashboard's deterministic composition.",
+            "Returns tabs, widget membership, layout coordinates, and groups for the target dashboard.",
+            DASHBOARD_TARGETING_GUIDANCE,
+            EXISTING_DASHBOARD_GUIDANCE,
+        )
+    )
+    async def read_dashboard(
+        dashboard_id: str | None = None,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Read one dashboard's deterministic composition."""
+        _ = wait_for_previous
+        return await run(
+            ReadDashboardCommand(
+                command="read_dashboard",
+                dashboard_id=dashboard_id,
             )
         )
 
@@ -346,6 +482,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
             "Requires backend_name and widget_id.",
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
+            "Use list_available_widgets and get_widget_schema first.",
         )
     )
     async def create_widget(
@@ -370,32 +507,6 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
 
     @server.tool(
         description=describe_tool(
-            "Ada-compatible alias for create_widget using the canonical client function-call name.",
-            "Requires backend_name and widget_id.",
-            DASHBOARD_TARGETING_GUIDANCE,
-            EXISTING_DASHBOARD_GUIDANCE,
-        )
-    )
-    async def add_widget_to_dashboard(
-        backend_name: str,
-        widget_id: str,
-        dashboard_id: str | None = None,
-        data_args: dict[str, Any] | None = None,
-        ui_args: dict[str, Any] | None = None,
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
-        """Create a Workspace widget using Ada's canonical tool name."""
-        return await create_widget(
-            dashboard_id=dashboard_id,
-            backend_name=backend_name,
-            widget_id=widget_id,
-            data_args=data_args,
-            ui_args=ui_args,
-            wait_for_previous=wait_for_previous,
-        )
-
-    @server.tool(
-        description=describe_tool(
             "Update one existing widget on a target dashboard.",
             WIDGET_INSTANCE_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
@@ -412,6 +523,12 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     ) -> ToolResponse:
         """Update an existing Workspace widget."""
         _ = wait_for_previous
+        if has_layout_ui_args(ui_args):
+            return invalid_request(
+                "update_widget",
+                "update_widget only supports widget-instance config changes. "
+                "Use update_dashboard_layout for x, y, w, h, gridData, or tab_id.",
+            )
         return await run(
             UpdateWidgetCommand(
                 command="update_widget",
@@ -424,28 +541,46 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
 
     @server.tool(
         description=describe_tool(
-            "Ada-compatible alias for update_widget using the canonical client function-call name.",
+            "Move or resize one widget in dashboard layout space.",
+            "Requires x, y, w, and h. Use tab_id from read_dashboard or get_workspace_snapshot.dashboard_composition when moving across tabs.",
             WIDGET_INSTANCE_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
         )
     )
-    async def update_widget_in_dashboard(
+    async def update_dashboard_layout(
+        x: float,
+        y: float,
+        w: float,
+        h: float,
         widget_uuid: str | None = None,
         widget_id: str | None = None,
         dashboard_id: str | None = None,
-        data_args: dict[str, Any] | None = None,
-        ui_args: dict[str, Any] | None = None,
+        tab_id: str | None = None,
+        min_w: float | None = None,
+        min_h: float | None = None,
+        max_w: float | None = None,
+        max_h: float | None = None,
         wait_for_previous: bool | None = None,
     ) -> ToolResponse:
-        """Update a Workspace widget using Ada's canonical tool name."""
-        return await update_widget(
-            dashboard_id=dashboard_id,
-            widget_uuid=widget_uuid,
-            widget_id=widget_id,
-            data_args=data_args,
-            ui_args=ui_args,
-            wait_for_previous=wait_for_previous,
+        """Move or resize one widget in dashboard layout space."""
+        _ = wait_for_previous
+        return await run(
+            UpdateDashboardLayoutCommand(
+                command="update_dashboard_layout",
+                dashboard_id=dashboard_id,
+                widget_uuid=widget_uuid,
+                widget_id=widget_id,
+                tab_id=tab_id,
+                x=x,
+                y=y,
+                w=w,
+                h=h,
+                min_w=min_w,
+                min_h=min_h,
+                max_w=max_w,
+                max_h=max_h,
+            )
         )
 
     @server.tool(

@@ -78,6 +78,7 @@ class WorkspaceSnapshot(Model):
     generated_at: int
     workspace_state: WorkspaceState | None = None
     workspace_options: list[str] = Field(default_factory=list)
+    dashboard_composition: dict[str, Any] | None = None
     widgets: dict[str, list[dict[str, Any]]] = Field(default_factory=widget_groups)
     context: list[dict[str, Any]] = Field(default_factory=list)
     artifacts: list[dict[str, Any]] = Field(default_factory=list)
@@ -147,12 +148,21 @@ class GetWidgetDataCommand(Model):
     data_sources: BridgePayloadList = Field(default_factory=list)
 
 
-class GetExtraWidgetDataCommand(Model):
-    """Fetch extra widget data from Workspace data sources."""
+class ListAvailableWidgetsCommand(Model):
+    """List widgets that can be created in the current Workspace session."""
 
-    command: Literal["get_extra_widget_data"]
+    command: Literal["list_available_widgets"]
     request_id: str | None = None
-    data_sources: BridgePayloadList = Field(default_factory=list)
+    origin: str | None = None
+
+
+class GetWidgetSchemaCommand(Model):
+    """Fetch one deterministic widget schema from the Workspace widget library."""
+
+    command: Literal["get_widget_schema"]
+    request_id: str | None = None
+    origin: str
+    widget_id: str
 
 
 class GetParamOptionsCommand(Model):
@@ -203,6 +213,52 @@ class DeleteWidgetCommand(Model):
     dashboard_id: str | None = None
     widget_uuid: str | None = None
     widget_id: str | None = None
+
+
+class CreateDashboardCommand(Model):
+    """Create one dashboard in the local Workspace session."""
+
+    command: Literal["create_dashboard"]
+    request_id: str | None = None
+    name: str
+    dashboard_id: str | None = None
+    activate: bool = True
+
+
+class UpdateDashboardCommand(Model):
+    """Update light metadata for one dashboard."""
+
+    command: Literal["update_dashboard"]
+    request_id: str | None = None
+    dashboard_id: str
+    name: str | None = None
+
+
+class ReadDashboardCommand(Model):
+    """Read one dashboard's deterministic composition."""
+
+    command: Literal["read_dashboard"]
+    request_id: str | None = None
+    dashboard_id: str | None = None
+
+
+class UpdateDashboardLayoutCommand(Model):
+    """Move or resize one widget in dashboard layout space."""
+
+    command: Literal["update_dashboard_layout"]
+    request_id: str | None = None
+    dashboard_id: str | None = None
+    widget_uuid: str | None = None
+    widget_id: str | None = None
+    tab_id: str | None = None
+    x: float
+    y: float
+    w: float
+    h: float
+    min_w: float | None = None
+    min_h: float | None = None
+    max_w: float | None = None
+    max_h: float | None = None
 
 
 class ManageNavigationBarCommand(Model):
@@ -266,12 +322,17 @@ class GetWorkspaceSnapshotCommand(Model):
 
 type WorkspaceCommand = Annotated[
     GetWidgetDataCommand
-    | GetExtraWidgetDataCommand
+    | ListAvailableWidgetsCommand
+    | GetWidgetSchemaCommand
     | GetParamOptionsCommand
     | ReadWidgetCommand
     | CreateWidgetCommand
     | UpdateWidgetCommand
     | DeleteWidgetCommand
+    | CreateDashboardCommand
+    | ReadDashboardCommand
+    | UpdateDashboardCommand
+    | UpdateDashboardLayoutCommand
     | ManageNavigationBarCommand
     | AddGenerativeWidgetCommand
     | AssignTasksToAgentsCommand

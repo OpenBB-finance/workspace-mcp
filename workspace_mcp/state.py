@@ -126,7 +126,24 @@ class BridgeSessionManager:
 
     async def handle_browser_message(self, raw_message: dict[str, Any]) -> None:
         """Apply one browser websocket message to the sidecar state."""
-        payload = browser_message_adapter.validate_python(raw_message)
+        try:
+            payload = browser_message_adapter.validate_python(raw_message)
+        except ValidationError as error:
+            async with self._lock:
+                self._require_session()
+                self._fail_pending_commands(
+                    self._error(
+                        code="invalid_request",
+                        message=(
+                            "Workspace browser sent an invalid websocket payload. "
+                            "This can happen when the connected browser build does "
+                            "not implement the requested bridge command."
+                        ),
+                        details={"errors": error.errors()},
+                    )
+                )
+            return
+
         async with self._lock:
             self._require_session()
 
