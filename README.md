@@ -8,15 +8,31 @@ What it does:
 - forwards MCP tool calls to the connected Workspace tab over websocket
 - returns fresh workspace snapshots and command results from the browser
 
-## Connect from Workspace
+## How to use
+
+### 1. Install & Run
+
+Install:
+
+```bash
+uv tool install --python 3.13 git+https://github.com/OpenBB-finance/workspace-mcp.git
+```
+
+Run:
+
+```bash
+workspace-mcp --host 127.0.0.1 --port 8787
+```
+
+### 2. Connect from Workspace
 
 - open OpenBB Workspace
 - go to the AI Agents tab
 - find `Workspace MCP Companion`
-- set the companion base URL to your sidecar URL, for example `http://127.0.0.1:8787` for local development or `https://mcp.example.com` for a remote deployment
+- set the companion base URL to your sidecar URL, for example `http://127.0.0.1:8787` for local or `https://mcp.example.com` for a remote deployment
 - connect the companion after the sidecar is running
 
-## Connect your AI agent
+### 3. Connect your AI agent
 
 Use the `http://127.0.0.1:8787/mcp` as the MCP url that you pass into the `mcp add` command of your agent.
 
@@ -55,25 +71,21 @@ Current MCP surface:
 - `execute_agent_tool`
 - `get_skill_content`
 
-Run locally:
+Current scope:
 
-```bash
-python -m workspace_mcp --host 127.0.0.1 --port 8787
-```
-
-Reload on code changes:
-
-```bash
-python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
-```
+- single user
+- one connected Workspace browser session
+- flat tool list
 
 Browser security:
 
 - `http` is fine for local deployments (`localhost`/`127.0.0.1`)
 - for any non-local deployment, use `https`; browsers will block insecure `http` sidecar requests from a secure Workspace origin
 
-Current scope:
+## Development
 
-- single user
-- one connected Workspace browser session
-- flat tool list
+Reload on code changes:
+
+```bash
+python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
+```
