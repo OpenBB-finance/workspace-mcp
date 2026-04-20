@@ -235,6 +235,24 @@ class UpdateDashboardCommand(Model):
     name: str | None = None
 
 
+class NavigateToDashboardCommand(Model):
+    """Navigate the Workspace browser to a specific dashboard."""
+
+    command: Literal["navigate_to_dashboard"]
+    request_id: str | None = None
+    dashboard_id: str
+    tab_id: str | None = None
+
+
+class SwitchTabCommand(Model):
+    """Switch to a specific inner tab on the current or target dashboard."""
+
+    command: Literal["switch_tab"]
+    request_id: str | None = None
+    dashboard_id: str | None = None
+    tab_id: str
+
+
 class ReadDashboardCommand(Model):
     """Read one dashboard's deterministic composition."""
 
@@ -334,6 +352,8 @@ type WorkspaceCommand = Annotated[
     | ReadDashboardCommand
     | UpdateDashboardCommand
     | UpdateDashboardLayoutCommand
+    | NavigateToDashboardCommand
+    | SwitchTabCommand
     | ManageNavigationBarCommand
     | AddGenerativeWidgetCommand
     | AssignTasksToAgentsCommand

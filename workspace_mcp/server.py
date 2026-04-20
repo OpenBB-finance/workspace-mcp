@@ -17,9 +17,11 @@ from workspace_mcp.models import (
     GetWidgetSchemaCommand,
     ListAvailableWidgetsCommand,
     ManageNavigationBarCommand,
+    NavigateToDashboardCommand,
     ParamOptionsRequest,
     ReadDashboardCommand,
     ReadWidgetCommand,
+    SwitchTabCommand,
     UpdateDashboardLayoutCommand,
     UpdateDashboardCommand,
     UpdateWidgetCommand,
@@ -825,6 +827,51 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 command="get_skill_content",
                 slug=slug,
                 reason=reason,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Navigate the Workspace browser to an existing dashboard.",
+            "Use dashboard_id from get_workspace_snapshot. Optionally switch to a specific tab via tab_id.",
+            EXISTING_DASHBOARD_GUIDANCE,
+        )
+    )
+    async def navigate_to_dashboard(
+        dashboard_id: str,
+        tab_id: str | None = None,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Navigate the browser to a specific dashboard."""
+        _ = wait_for_previous
+        return await run(
+            NavigateToDashboardCommand(
+                command="navigate_to_dashboard",
+                dashboard_id=dashboard_id,
+                tab_id=tab_id,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Switch to a specific inner tab on a dashboard.",
+            "Use tab_id from read_dashboard or get_workspace_snapshot.dashboard_composition.",
+            DASHBOARD_TARGETING_GUIDANCE,
+            EXISTING_DASHBOARD_GUIDANCE,
+        )
+    )
+    async def switch_tab(
+        tab_id: str,
+        dashboard_id: str | None = None,
+        wait_for_previous: bool | None = None,
+    ) -> ToolResponse:
+        """Switch the active inner tab on a dashboard."""
+        _ = wait_for_previous
+        return await run(
+            SwitchTabCommand(
+                command="switch_tab",
+                tab_id=tab_id,
+                dashboard_id=dashboard_id,
             )
         )
 
