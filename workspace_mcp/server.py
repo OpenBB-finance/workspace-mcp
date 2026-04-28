@@ -1,5 +1,6 @@
 """FastMCP tool surface for the Workspace sidecar."""
 
+import json
 from typing import Any, cast
 
 from fastmcp import FastMCP
@@ -7,23 +8,19 @@ from fastmcp import FastMCP
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     AssignTasksToAgentsCommand,
-    CreateDashboardCommand,
     CreateWidgetCommand,
     DeleteWidgetCommand,
-    ExecuteAgentToolCommand,
     GetParamOptionsCommand,
     GetSkillContentCommand,
     GetWidgetDataCommand,
     GetWidgetSchemaCommand,
     ListAvailableWidgetsCommand,
+    ManageDashboardCommand,
     ManageNavigationBarCommand,
-    NavigateToDashboardCommand,
+    NavigateWorkspaceCommand,
     ParamOptionsRequest,
-    ReadDashboardCommand,
     ReadWidgetCommand,
-    SwitchTabCommand,
     UpdateDashboardLayoutCommand,
-    UpdateDashboardCommand,
     UpdateWidgetCommand,
     WidgetDataRequest,
     WorkspaceWidgetConfig,
@@ -51,25 +48,26 @@ WIDGET_SCHEMA_GUIDANCE = (
 )
 CREATE_WIDGET_GUIDANCE = (
     "For create_widget, pass origin as the exact catalog value returned by "
-    "list_available_widgets. backend_name is accepted as a legacy alias, but "
-    "origin is the canonical MCP field. data_args and ui_args must be native "
-    "objects, not JSON strings."
+    "list_available_widgets. Pass data_args_json and ui_args_json as JSON "
+    "object strings when config values are needed."
 )
 DATA_SOURCE_SHAPE = (
-    "Use data_sources items shaped like {origin, widget_id, data_args, "
-    "widget_uuid?, ssm_request?}. Pass data_sources as a native array, not a "
-    "JSON string."
+    "Pass origin, widget_id, and data_args_json for one data source. "
+    "data_args_json and ssm_request_json must be JSON object strings."
 )
 PARAM_OPTIONS_SHAPE = (
-    "Use param_options_queries items shaped like {origin, widget_id, "
-    "param_name, data_args}. Pass param_options_queries as a native array, "
-    "not a JSON string. Prefer one query at a time for large option sets."
+    "Pass origin, widget_id, param_name, and optional data_args_json for one "
+    "parameter option query. Only call get_params_options after get_widget_schema "
+    "shows the exact param has requires_options_lookup=true. Use the exact "
+    "paramName from the schema as param_name. data_args_json must be a JSON "
+    "object string with the values required by options_lookup_params when present."
 )
 GENERATIVE_WIDGET_GUIDANCE = (
-    "For add_generative_widget: note and html require string data. "
-    "table requires a native list[dict] data array. chart requires a native "
-    "list[dict] data array plus "
-    "chart_params with chartType, xKey, and non-empty yKey. "
+    "For add_generative_widget: note and html require data_json as the raw text "
+    "or HTML content string; JSON string literals are also accepted. table requires "
+    "data_json as a JSON array of objects. chart requires data_json as a JSON "
+    "array of objects plus chart_params_json as a JSON object with chartType, "
+    "xKey, and non-empty yKey. "
     "Use widget_type='note' for rich text notes such as rich_note. "
     "The response includes widget_uuid; use that UUID for layout changes."
 )
@@ -87,13 +85,14 @@ EXISTING_DASHBOARD_GUIDANCE = (
     "These tools operate on an existing dashboard only. They do not create dashboards."
 )
 CREATE_DASHBOARD_GUIDANCE = (
-    "Use create_dashboard to create a dashboard first. By default it activates the "
-    "new dashboard route so follow-up snapshot and widget commands target it."
+    "Use manage_dashboard with operation='create' to create a dashboard first. "
+    "By default it activates the new dashboard route so follow-up snapshot and "
+    "widget commands target it."
 )
 LAYOUT_GUIDANCE = (
     "Visible placement is controlled by dashboard composition, not update_widget. "
-    "Use read_dashboard or get_workspace_snapshot.dashboard_composition to inspect "
-    "tabs and layout, then use update_dashboard_layout for x, y, w, h, and tab_id. "
+    "Use manage_dashboard operation='read' or get_workspace_snapshot.dashboard_composition "
+    "to inspect tabs and layout, then use update_widget_layout for x, y, w, h, and tab_id. "
     "The grid is 40 columns wide: full width is w=40, half width is w=20, one quarter "
     "is w=10. Typical minimums are about min_w=8 and min_h=4. If a navigation_bar is "
     "present it usually occupies y=0 with h=2, so the first content row usually starts "
@@ -105,17 +104,18 @@ NAVIGATION_BAR_GUIDANCE = (
     "Its create operation creates or initializes navigation tabs on that dashboard; it does not create a dashboard."
 )
 DISCOVERY_WORKFLOW = (
-    "Recommended workflow: call get_workspace_snapshot first, create_dashboard when "
-    "you need a fresh dashboard, call list_available_widgets to enumerate candidate "
-    "widgets, call get_widget_schema for the exact widget contract, call "
+    "Recommended workflow: call get_workspace_snapshot first, manage_dashboard "
+    "with operation='create' when you need a fresh dashboard, call "
+    "list_available_widgets to enumerate candidate widgets, call "
+    "get_widget_schema for the exact widget contract, call "
     "get_params_options when a schema field returns requires_options_lookup=true, then call "
-    "create_widget with explicit dashboard_id, origin, widget_id, data_args, and "
-    "ui_args. list_available_widgets only returns the deterministic plain-create "
+    "create_widget with explicit dashboard_id, origin, widget_id, data_args_json, "
+    "and ui_args_json. list_available_widgets only returns the deterministic plain-create "
     "subset; widgets that still need runtime-only bootstrap are intentionally "
     "excluded. Do not use create_widget for rich_note; use add_generative_widget "
-    "with widget_type='note'. Use read_dashboard or "
+    "with widget_type='note'. Use manage_dashboard operation='read' or "
     "get_workspace_snapshot.dashboard_composition "
-    "to inspect visible layout and update_dashboard_layout to move or resize "
+    "to inspect visible layout and update_widget_layout to move or resize "
     "widgets."
 )
 SERVER_INSTRUCTIONS = " ".join(
@@ -218,6 +218,97 @@ def invalid_request(command: str, message: str) -> ToolResponse:
             "retryable": False,
         },
     }
+
+
+class JsonArgumentError(ValueError):
+    """Invalid JSON string supplied to a flat MCP tool argument."""
+
+    def __init__(self, response: ToolResponse):
+        super().__init__(response["message"])
+        self.response = response
+
+
+def parse_json_list(
+    command: str,
+    field_name: str,
+    raw_value: str | None,
+) -> list[dict[str, Any]]:
+    """Parse a JSON string argument that must contain a list of objects."""
+    if raw_value is None:
+        return []
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError as error:
+        raise JsonArgumentError(
+            invalid_request(
+                command,
+                f"{command} requires {field_name} to be valid JSON: {error.msg}.",
+            )
+        )
+    if not isinstance(value, list) or not all(isinstance(item, dict) for item in value):
+        raise JsonArgumentError(
+            invalid_request(
+                command,
+                f"{command} requires {field_name} as a JSON array of objects.",
+            )
+        )
+    return value
+
+
+def parse_json_dict(
+    command: str,
+    field_name: str,
+    raw_value: str | None,
+) -> dict[str, Any]:
+    """Parse a JSON string argument that must contain an object."""
+    if raw_value is None:
+        return {}
+    try:
+        value = json.loads(raw_value)
+    except json.JSONDecodeError as error:
+        raise JsonArgumentError(
+            invalid_request(
+                command,
+                f"{command} requires {field_name} to be valid JSON: {error.msg}.",
+            )
+        )
+    if not isinstance(value, dict):
+        raise JsonArgumentError(
+            invalid_request(
+                command,
+                f"{command} requires {field_name} as a JSON object.",
+            )
+        )
+    return value
+
+
+def parse_json_value(
+    command: str,
+    field_name: str,
+    raw_value: str | None,
+) -> Any:
+    """Parse a JSON string argument into any JSON value."""
+    if raw_value is None:
+        return None
+    try:
+        return json.loads(raw_value)
+    except json.JSONDecodeError as error:
+        raise JsonArgumentError(
+            invalid_request(
+                command,
+                f"{command} requires {field_name} to be valid JSON: {error.msg}.",
+            )
+        )
+
+
+def parse_generative_data(widget_type: str, raw_value: str | None) -> Any:
+    """Parse data_json, accepting plain strings for text-like widgets."""
+    try:
+        return parse_json_value("add_generative_widget", "data_json", raw_value)
+    except JsonArgumentError as error:
+        if widget_type in {"note", "html"} and raw_value is not None:
+            return raw_value
+        raise error
 
 
 def validate_add_generative_widget_request(
@@ -323,15 +414,12 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Request a fresh OpenBB Workspace snapshot from the connected browser.",
             "Call this first when you need current dashboard state, dashboard identifiers across the workspace, or skill identifiers.",
-            "The snapshot is intentionally compact: use list_available_widgets, get_widget_schema, and read_dashboard for deeper follow-up inspection.",
+            "The snapshot is intentionally compact: use list_available_widgets, get_widget_schema, and manage_dashboard for deeper follow-up inspection.",
             "dashboard_composition exposes deterministic tabs, layout coordinates, and groups for the current dashboard.",
         )
     )
-    async def get_workspace_snapshot(
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
+    async def get_workspace_snapshot() -> ToolResponse:
         """Fetch the current workspace snapshot from the connected browser."""
-        _ = wait_for_previous
         return await run({"command": "get_workspace_snapshot"})
 
     @server.tool(
@@ -342,15 +430,36 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         )
     )
     async def get_widget_data(
-        data_sources: list[WidgetDataRequest],
-        wait_for_previous: bool | None = None,
+        origin: str,
+        widget_id: str,
+        data_args_json: str | None = None,
+        widget_uuid: str | None = None,
+        ssm_request_json: str | None = None,
     ) -> ToolResponse:
         """Fetch widget data using the same browser-side path Ada uses."""
-        _ = wait_for_previous
+        try:
+            data_args = parse_json_dict(
+                "get_widget_data", "data_args_json", data_args_json
+            )
+            ssm_request = parse_json_dict(
+                "get_widget_data", "ssm_request_json", ssm_request_json
+            )
+        except JsonArgumentError as error:
+            return error.response
         return await run(
             GetWidgetDataCommand(
                 command="get_widget_data",
-                data_sources=data_source_payloads(data_sources),
+                data_sources=data_source_payloads(
+                    [
+                        WidgetDataRequest(
+                            origin=origin,
+                            widget_id=widget_id,
+                            data_args=data_args,
+                            widget_uuid=widget_uuid,
+                            ssm_request=ssm_request or None,
+                        )
+                    ]
+                ),
             )
         )
 
@@ -364,10 +473,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     )
     async def list_available_widgets(
         origin: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """List widgets that can be created in the current Workspace session."""
-        _ = wait_for_previous
         return await run(
             ListAvailableWidgetsCommand(
                 command="list_available_widgets",
@@ -387,10 +494,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     async def get_widget_schema(
         origin: str | None = None,
         widget_id: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Fetch one deterministic widget schema from the Workspace widget library."""
-        _ = wait_for_previous
         if not origin or not widget_id:
             return invalid_request(
                 "get_widget_schema",
@@ -412,87 +517,90 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         )
     )
     async def get_params_options(
-        param_options_queries: list[ParamOptionsRequest],
-        wait_for_previous: bool | None = None,
+        origin: str,
+        widget_id: str,
+        param_name: str,
+        data_args_json: str | None = None,
     ) -> ToolResponse:
         """Fetch parameter options from the browser bridge."""
-        _ = wait_for_previous
+        try:
+            data_args = parse_json_dict(
+                "get_params_options", "data_args_json", data_args_json
+            )
+        except JsonArgumentError as error:
+            return error.response
         return await run(
             GetParamOptionsCommand(
                 command="get_params_options",
-                param_options_queries=param_options_payloads(param_options_queries),
+                param_options_queries=param_options_payloads(
+                    [
+                        ParamOptionsRequest(
+                            origin=origin,
+                            widget_id=widget_id,
+                            param_name=param_name,
+                            data_args=data_args,
+                        )
+                    ]
+                ),
             )
         )
 
     @server.tool(
         description=describe_tool(
-            "Create one dashboard in the local Workspace session.",
-            "Returns the new dashboard_id.",
-            "By default the browser activates the new dashboard route.",
+            "Create, read, or update one Workspace dashboard.",
+            "Requires operation from {create, read, update}.",
+            "For create, pass name and optional dashboard_id and activate.",
+            "For read, pass optional dashboard_id; omitted dashboard_id targets the current dashboard route.",
+            "For update, pass dashboard_id and name.",
         )
     )
-    async def create_dashboard(
-        name: str,
+    async def manage_dashboard(
+        operation: str,
         dashboard_id: str | None = None,
-        activate: bool = True,
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
-        """Create a dashboard for deterministic authoring flows."""
-        _ = wait_for_previous
-        return await run(
-            CreateDashboardCommand(
-                command="create_dashboard",
-                name=name,
-                dashboard_id=dashboard_id,
-                activate=activate,
-            )
-        )
-
-    @server.tool(
-        description=describe_tool(
-            "Update light metadata for one dashboard.",
-            "Currently supports dashboard rename via name.",
-        )
-    )
-    async def update_dashboard(
-        dashboard_id: str,
         name: str | None = None,
-        wait_for_previous: bool | None = None,
+        activate: bool | None = None,
     ) -> ToolResponse:
-        """Update light dashboard metadata."""
-        _ = wait_for_previous
-        if name is None:
-            return invalid_request(
-                "update_dashboard",
-                "update_dashboard currently requires name.",
+        """Create, read, or update dashboard metadata and composition."""
+        if operation == "create":
+            if not name:
+                return invalid_request(
+                    "manage_dashboard",
+                    "manage_dashboard operation='create' requires name.",
+                )
+            return await run(
+                ManageDashboardCommand(
+                    command="manage_dashboard",
+                    operation="create",
+                    name=name,
+                    dashboard_id=dashboard_id,
+                    activate=True if activate is None else activate,
+                )
             )
-        return await run(
-            UpdateDashboardCommand(
-                command="update_dashboard",
-                dashboard_id=dashboard_id,
-                name=name,
+        if operation == "read":
+            return await run(
+                ManageDashboardCommand(
+                    command="manage_dashboard",
+                    operation="read",
+                    dashboard_id=dashboard_id,
+                )
             )
-        )
-
-    @server.tool(
-        description=describe_tool(
-            "Read one dashboard's deterministic composition.",
-            "Returns tabs, widget membership, layout coordinates, and groups for the target dashboard.",
-            DASHBOARD_TARGETING_GUIDANCE,
-            EXISTING_DASHBOARD_GUIDANCE,
-        )
-    )
-    async def read_dashboard(
-        dashboard_id: str | None = None,
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
-        """Read one dashboard's deterministic composition."""
-        _ = wait_for_previous
-        return await run(
-            ReadDashboardCommand(
-                command="read_dashboard",
-                dashboard_id=dashboard_id,
+        if operation == "update":
+            if not dashboard_id or name is None:
+                return invalid_request(
+                    "manage_dashboard",
+                    "manage_dashboard operation='update' requires dashboard_id and name.",
+                )
+            return await run(
+                ManageDashboardCommand(
+                    command="manage_dashboard",
+                    operation="update",
+                    dashboard_id=dashboard_id,
+                    name=name,
+                )
             )
+        return invalid_request(
+            "manage_dashboard",
+            "manage_dashboard requires operation from {create, read, update}.",
         )
 
     @server.tool(
@@ -505,7 +613,6 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         widget_uuid: str | None = None,
         widget_id: str | None = None,
         dashboard_id: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Load one widget's current payload from Workspace.
 
@@ -513,7 +620,6 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         accepted as a fallback alias for callers that only know the widget type
         identifier and need the browser bridge to resolve the active instance.
         """
-        _ = wait_for_previous
         return await run(
             ReadWidgetCommand(
                 command="read_widget",
@@ -538,23 +644,14 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         origin: str | None = None,
         widget_id: str | None = None,
         dashboard_id: str | None = None,
-        backend_name: str | None = None,
-        data_args: dict[str, Any] | None = None,
-        ui_args: dict[str, Any] | None = None,
-        wait_for_previous: bool | None = None,
+        data_args_json: str | None = None,
+        ui_args_json: str | None = None,
     ) -> ToolResponse:
         """Create a new Workspace widget."""
-        _ = wait_for_previous
-        resolved_origin = origin or backend_name
-        if not resolved_origin or not widget_id:
+        if not origin or not widget_id:
             return invalid_request(
                 "create_widget",
                 "create_widget requires origin from list_available_widgets and widget_id.",
-            )
-        if origin and backend_name and origin != backend_name:
-            return invalid_request(
-                "create_widget",
-                "create_widget received conflicting origin and backend_name values. Pass one catalog identity only.",
             )
         if is_generative_only_widget(widget_id):
             return invalid_request(
@@ -562,13 +659,23 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 "create_widget does not support 'rich_note'. "
                 "Use add_generative_widget with widget_type='note' instead.",
             )
+        try:
+            data_args = parse_json_dict(
+                "create_widget", "data_args_json", data_args_json
+            )
+            ui_args = parse_json_dict("create_widget", "ui_args_json", ui_args_json)
+        except JsonArgumentError as error:
+            return error.response
         return await run(
             CreateWidgetCommand(
                 command="create_widget",
                 dashboard_id=dashboard_id,
-                backend_name=resolved_origin,
+                backend_name=origin,
                 widget_id=widget_id,
-                config=widget_config(data_args=data_args, ui_args=ui_args),
+                config=widget_config(
+                    data_args=data_args or None,
+                    ui_args=ui_args or None,
+                ),
             )
         )
 
@@ -584,17 +691,22 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         widget_uuid: str | None = None,
         widget_id: str | None = None,
         dashboard_id: str | None = None,
-        data_args: dict[str, Any] | None = None,
-        ui_args: dict[str, Any] | None = None,
-        wait_for_previous: bool | None = None,
+        data_args_json: str | None = None,
+        ui_args_json: str | None = None,
     ) -> ToolResponse:
         """Update an existing Workspace widget."""
-        _ = wait_for_previous
+        try:
+            data_args = parse_json_dict(
+                "update_widget", "data_args_json", data_args_json
+            )
+            ui_args = parse_json_dict("update_widget", "ui_args_json", ui_args_json)
+        except JsonArgumentError as error:
+            return error.response
         if has_layout_ui_args(ui_args):
             return invalid_request(
                 "update_widget",
                 "update_widget only supports widget-instance config changes. "
-                "Use update_dashboard_layout for x, y, w, h, gridData, or tab_id.",
+                "Use update_widget_layout for x, y, w, h, gridData, or tab_id.",
             )
         return await run(
             UpdateWidgetCommand(
@@ -602,21 +714,24 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 dashboard_id=dashboard_id,
                 widget_uuid=widget_uuid,
                 widget_id=widget_id,
-                config=required_widget_config(data_args=data_args, ui_args=ui_args),
+                config=required_widget_config(
+                    data_args=data_args or None,
+                    ui_args=ui_args or None,
+                ),
             )
         )
 
     @server.tool(
         description=describe_tool(
             "Move or resize one widget in dashboard layout space.",
-            "Requires x, y, w, and h. Use tab_id from read_dashboard or get_workspace_snapshot.dashboard_composition when moving across tabs.",
+            "Requires x, y, w, and h. Use tab_id from manage_dashboard operation='read' or get_workspace_snapshot.dashboard_composition when moving across tabs.",
             "The layout grid is 40 columns wide: full width is w=40, half width is w=20, one quarter is w=10. If a navigation_bar is present, first content usually starts at y=2.",
             WIDGET_INSTANCE_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
         )
     )
-    async def update_dashboard_layout(
+    async def update_widget_layout(
         x: float,
         y: float,
         w: float,
@@ -629,10 +744,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         min_h: float | None = None,
         max_w: float | None = None,
         max_h: float | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Move or resize one widget in dashboard layout space."""
-        _ = wait_for_previous
         return await run(
             UpdateDashboardLayoutCommand(
                 command="update_dashboard_layout",
@@ -663,10 +776,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         widget_uuid: str | None = None,
         widget_id: str | None = None,
         dashboard_id: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Delete a Workspace widget."""
-        _ = wait_for_previous
         return await run(
             DeleteWidgetCommand(
                 command="delete_widget",
@@ -688,12 +799,10 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     async def manage_navigation_bar(
         operation: str,
         dashboard_id: str | None = None,
-        tabs: list[dict[str, Any]] | None = None,
-        rename_map: dict[str, str] | None = None,
-        wait_for_previous: bool | None = None,
+        tabs_json: str | None = None,
+        rename_map_json: str | None = None,
     ) -> ToolResponse:
         """Create tabs or update navigation tab metadata."""
-        _ = wait_for_previous
         allowed_operations: set[NavigationOperationName] = {
             "create",
             "add_tabs",
@@ -705,13 +814,30 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 "manage_navigation_bar",
                 "manage_navigation_bar requires operation from {create, add_tabs, remove_tabs, rename_tabs}.",
             )
+        try:
+            tabs = parse_json_list("manage_navigation_bar", "tabs_json", tabs_json)
+            rename_map = parse_json_dict(
+                "manage_navigation_bar", "rename_map_json", rename_map_json
+            )
+        except JsonArgumentError as error:
+            return error.response
+        if operation in {"create", "add_tabs", "remove_tabs"} and not tabs:
+            return invalid_request(
+                "manage_navigation_bar",
+                f"manage_navigation_bar operation='{operation}' requires tabs_json.",
+            )
+        if operation == "rename_tabs" and not rename_map:
+            return invalid_request(
+                "manage_navigation_bar",
+                "manage_navigation_bar operation='rename_tabs' requires rename_map_json.",
+            )
         return await run(
             ManageNavigationBarCommand(
                 command="manage_navigation_bar",
                 dashboard_id=dashboard_id,
                 operation=cast(Any, operation),
-                tabs=tabs or [],
-                rename_map=rename_map or {},
+                tabs=tabs,
+                rename_map=cast(dict[str, str], rename_map),
             )
         )
 
@@ -727,15 +853,13 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     async def add_generative_widget(
         widget_type: str,
         dashboard_id: str | None = None,
-        data: list[dict[str, Any]] | str | None = None,
+        data_json: str | None = None,
         name: str | None = None,
         description: str | None = None,
-        chart_params: dict[str, Any] | None = None,
+        chart_params_json: str | None = None,
         inner_tab: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Create a generative widget from inline content."""
-        _ = wait_for_previous
         allowed_widget_types: set[GenerativeWidgetTypeName] = {
             "note",
             "table",
@@ -747,10 +871,17 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 "add_generative_widget",
                 "add_generative_widget requires widget_type from {note, table, chart, html}.",
             )
+        try:
+            data = parse_generative_data(widget_type, data_json)
+            chart_params = parse_json_dict(
+                "add_generative_widget", "chart_params_json", chart_params_json
+            )
+        except JsonArgumentError as error:
+            return error.response
         payload_error = validate_add_generative_widget_request(
             widget_type=widget_type,
-            data=data,
-            chart_params=chart_params,
+            data=cast(list[dict[str, Any]] | str | None, data),
+            chart_params=chart_params or None,
         )
         if payload_error:
             return invalid_request("add_generative_widget", payload_error)
@@ -759,10 +890,10 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 command="add_generative_widget",
                 dashboard_id=dashboard_id,
                 widget_type=cast(Any, widget_type),
-                data=data,
+                data=cast(list[dict[str, Any]] | str | None, data),
                 name=name,
                 description=description,
-                chart_params=chart_params,
+                chart_params=chart_params or None,
                 inner_tab=inner_tab,
             )
         )
@@ -774,38 +905,19 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         )
     )
     async def assign_tasks_to_agents(
-        task_requests: list[dict[str, Any]],
-        wait_for_previous: bool | None = None,
+        task_requests_json: str,
     ) -> ToolResponse:
         """Delegate work to Workspace agents through the browser bridge."""
-        _ = wait_for_previous
+        try:
+            task_requests = parse_json_list(
+                "assign_tasks_to_agents", "task_requests_json", task_requests_json
+            )
+        except JsonArgumentError as error:
+            return error.response
         return await run(
             AssignTasksToAgentsCommand(
                 command="assign_tasks_to_agents",
                 task_requests=payload_list(task_requests),
-            )
-        )
-
-    @server.tool(
-        description=describe_tool(
-            "Execute one Workspace-connected MCP tool.",
-            "Requires server_id, tool_name, and optional parameters.",
-        )
-    )
-    async def execute_agent_tool(
-        server_id: str,
-        tool_name: str,
-        parameters: dict[str, Any] | None = None,
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
-        """Execute one MCP tool via Workspace's existing MCP executor."""
-        _ = wait_for_previous
-        return await run(
-            ExecuteAgentToolCommand(
-                command="execute_agent_tool",
-                server_id=server_id,
-                tool_name=tool_name,
-                parameters=parameters or {},
             )
         )
 
@@ -818,10 +930,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     async def get_skill_content(
         slug: str,
         reason: str | None = None,
-        wait_for_previous: bool | None = None,
     ) -> ToolResponse:
         """Load one skill from Workspace's skill library."""
-        _ = wait_for_previous
         return await run(
             GetSkillContentCommand(
                 command="get_skill_content",
@@ -832,47 +942,50 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
 
     @server.tool(
         description=describe_tool(
-            "Navigate the Workspace browser to an existing dashboard.",
-            "Use dashboard_id from get_workspace_snapshot. Optionally switch to a specific tab via tab_id.",
+            "Navigate the Workspace browser to an existing dashboard or inner tab.",
+            "Requires operation from {dashboard, tab}.",
+            "For operation='dashboard', pass dashboard_id and optional tab_id.",
+            "For operation='tab', pass tab_id and optional dashboard_id; omitted dashboard_id targets the current dashboard route.",
             EXISTING_DASHBOARD_GUIDANCE,
         )
     )
-    async def navigate_to_dashboard(
-        dashboard_id: str,
-        tab_id: str | None = None,
-        wait_for_previous: bool | None = None,
-    ) -> ToolResponse:
-        """Navigate the browser to a specific dashboard."""
-        _ = wait_for_previous
-        return await run(
-            NavigateToDashboardCommand(
-                command="navigate_to_dashboard",
-                dashboard_id=dashboard_id,
-                tab_id=tab_id,
-            )
-        )
-
-    @server.tool(
-        description=describe_tool(
-            "Switch to a specific inner tab on a dashboard.",
-            "Use tab_id from read_dashboard or get_workspace_snapshot.dashboard_composition.",
-            DASHBOARD_TARGETING_GUIDANCE,
-            EXISTING_DASHBOARD_GUIDANCE,
-        )
-    )
-    async def switch_tab(
-        tab_id: str,
+    async def navigate_workspace(
+        operation: str,
         dashboard_id: str | None = None,
-        wait_for_previous: bool | None = None,
+        tab_id: str | None = None,
     ) -> ToolResponse:
-        """Switch the active inner tab on a dashboard."""
-        _ = wait_for_previous
-        return await run(
-            SwitchTabCommand(
-                command="switch_tab",
-                tab_id=tab_id,
-                dashboard_id=dashboard_id,
+        """Navigate to a dashboard route or switch an inner tab."""
+        if operation == "dashboard":
+            if not dashboard_id:
+                return invalid_request(
+                    "navigate_workspace",
+                    "navigate_workspace operation='dashboard' requires dashboard_id.",
+                )
+            return await run(
+                NavigateWorkspaceCommand(
+                    command="navigate_workspace",
+                    operation="dashboard",
+                    dashboard_id=dashboard_id,
+                    tab_id=tab_id,
+                )
             )
+        if operation == "tab":
+            if not tab_id:
+                return invalid_request(
+                    "navigate_workspace",
+                    "navigate_workspace operation='tab' requires tab_id.",
+                )
+            return await run(
+                NavigateWorkspaceCommand(
+                    command="navigate_workspace",
+                    operation="tab",
+                    tab_id=tab_id,
+                    dashboard_id=dashboard_id,
+                )
+            )
+        return invalid_request(
+            "navigate_workspace",
+            "navigate_workspace requires operation from {dashboard, tab}.",
         )
 
     return server

@@ -16,6 +16,8 @@ type BridgeErrorCode = Literal[
 ]
 type NavigationOperation = Literal["create", "add_tabs", "remove_tabs", "rename_tabs"]
 type GenerativeWidgetType = Literal["note", "table", "chart", "html"]
+type DashboardOperation = Literal["create", "read", "update"]
+type WorkspaceNavigationOperation = Literal["dashboard", "tab"]
 type BridgePayload = dict[str, Any]
 type BridgePayloadList = list[BridgePayload]
 
@@ -216,49 +218,25 @@ class DeleteWidgetCommand(Model):
     widget_id: str | None = None
 
 
-class CreateDashboardCommand(Model):
-    """Create one dashboard in the local Workspace session."""
+class ManageDashboardCommand(Model):
+    """Create, read, or update dashboard metadata and composition."""
 
-    command: Literal["create_dashboard"]
+    command: Literal["manage_dashboard"]
     request_id: str | None = None
-    name: str
+    operation: DashboardOperation
     dashboard_id: str | None = None
-    activate: bool = True
-
-
-class UpdateDashboardCommand(Model):
-    """Update light metadata for one dashboard."""
-
-    command: Literal["update_dashboard"]
-    request_id: str | None = None
-    dashboard_id: str
     name: str | None = None
+    activate: bool | None = None
 
 
-class NavigateToDashboardCommand(Model):
-    """Navigate the Workspace browser to a specific dashboard."""
+class NavigateWorkspaceCommand(Model):
+    """Navigate the Workspace browser to an existing dashboard or inner tab."""
 
-    command: Literal["navigate_to_dashboard"]
+    command: Literal["navigate_workspace"]
     request_id: str | None = None
-    dashboard_id: str
+    operation: WorkspaceNavigationOperation
+    dashboard_id: str | None = None
     tab_id: str | None = None
-
-
-class SwitchTabCommand(Model):
-    """Switch to a specific inner tab on the current or target dashboard."""
-
-    command: Literal["switch_tab"]
-    request_id: str | None = None
-    dashboard_id: str | None = None
-    tab_id: str
-
-
-class ReadDashboardCommand(Model):
-    """Read one dashboard's deterministic composition."""
-
-    command: Literal["read_dashboard"]
-    request_id: str | None = None
-    dashboard_id: str | None = None
 
 
 class UpdateDashboardLayoutCommand(Model):
@@ -313,16 +291,6 @@ class AssignTasksToAgentsCommand(Model):
     task_requests: BridgePayloadList = Field(default_factory=list)
 
 
-class ExecuteAgentToolCommand(Model):
-    """Execute one MCP tool through Workspace's agent-tool executor."""
-
-    command: Literal["execute_agent_tool"]
-    request_id: str | None = None
-    server_id: str
-    tool_name: str
-    parameters: BridgePayload = Field(default_factory=dict)
-
-
 class GetSkillContentCommand(Model):
     """Load one skill body from the Workspace skill library."""
 
@@ -348,16 +316,12 @@ type WorkspaceCommand = Annotated[
     | CreateWidgetCommand
     | UpdateWidgetCommand
     | DeleteWidgetCommand
-    | CreateDashboardCommand
-    | ReadDashboardCommand
-    | UpdateDashboardCommand
+    | ManageDashboardCommand
     | UpdateDashboardLayoutCommand
-    | NavigateToDashboardCommand
-    | SwitchTabCommand
+    | NavigateWorkspaceCommand
     | ManageNavigationBarCommand
     | AddGenerativeWidgetCommand
     | AssignTasksToAgentsCommand
-    | ExecuteAgentToolCommand
     | GetSkillContentCommand
     | GetWorkspaceSnapshotCommand,
     Field(discriminator="command"),

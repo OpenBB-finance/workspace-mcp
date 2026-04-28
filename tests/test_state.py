@@ -224,50 +224,6 @@ async def test_invalid_browser_payload_fails_pending_command_without_disconnect(
 
 
 @pytest.mark.asyncio
-async def test_execute_agent_tool_round_trip(
-    bridge_manager: BridgeSessionManager,
-) -> None:
-    """Agent-tool commands should forward structured payloads unchanged."""
-    socket = await connect_browser(bridge_manager)
-
-    task = asyncio.create_task(
-        bridge_manager.execute_command(
-            {
-                "command": "execute_agent_tool",
-                "server_id": "docs",
-                "tool_name": "docs_search",
-                "parameters": {"query": "workspace mcp"},
-            }
-        )
-    )
-
-    await asyncio.sleep(0)
-    command = socket.messages[0]["command"]
-    request_id = command["request_id"]
-
-    assert command["server_id"] == "docs"
-    assert command["tool_name"] == "docs_search"
-    assert command["parameters"] == {"query": "workspace mcp"}
-
-    await bridge_manager.handle_browser_message(
-        {
-            "type": "command_result",
-            "result": WorkspaceCommandResult(
-                ok=True,
-                command="execute_agent_tool",
-                request_id=request_id,
-                message="Tool executed.",
-                data={"items": [{"content": "result"}]},
-            ).model_dump(mode="json"),
-        }
-    )
-
-    result = await task
-    assert result.ok is True
-    assert result.data == {"items": [{"content": "result"}]}
-
-
-@pytest.mark.asyncio
 async def test_read_widget_accepts_widget_id_alias(
     bridge_manager: BridgeSessionManager,
 ) -> None:

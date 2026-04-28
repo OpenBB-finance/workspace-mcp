@@ -1,16 +1,23 @@
 """Server metadata tests for the Workspace MCP tool surface."""
 
+from typing import cast
+
 import pytest
 
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     CreateWidgetCommand,
     GetWidgetSchemaCommand,
+    ManageDashboardCommand,
     ManageNavigationBarCommand,
+    NavigateWorkspaceCommand,
     ParamOptionsRequest,
     UpdateWidgetCommand,
     WidgetDataRequest,
+    WorkspaceCommand,
+    WorkspaceCommandResult,
     WorkspaceWidgetConfig,
+    workspace_command_adapter,
 )
 from workspace_mcp.server import (
     SERVER_INSTRUCTIONS,
@@ -22,6 +29,26 @@ from workspace_mcp.server import (
     validate_add_generative_widget_request,
 )
 from workspace_mcp.state import BridgeSessionManager
+
+
+class RecordingBridgeState:
+    """Small bridge double that records commands sent by tool handlers."""
+
+    def __init__(self) -> None:
+        self.commands: list[WorkspaceCommand] = []
+
+    async def execute_command(
+        self, command: WorkspaceCommand | dict[str, object]
+    ) -> WorkspaceCommandResult:
+        if isinstance(command, dict):
+            command = workspace_command_adapter.validate_python(command)
+        self.commands.append(command)
+        return WorkspaceCommandResult(
+            ok=True,
+            command=command.command,
+            request_id=command.request_id,
+            message="ok",
+        )
 
 
 @pytest.mark.asyncio
@@ -42,18 +69,131 @@ async def test_workspace_tool_usage_prompt_is_registered() -> None:
         "Generic guidance for using the OpenBB Workspace MCP tool surface."
     )
     assert "get_workspace_snapshot" in SERVER_INSTRUCTIONS
-    assert "{origin, widget_id, data_args" in SERVER_INSTRUCTIONS
+    assert "Pass origin, widget_id, and data_args_json" in SERVER_INSTRUCTIONS
     assert "Do not use create_widget for rich_note" in SERVER_INSTRUCTIONS
     assert "The grid is 40 columns wide" in SERVER_INSTRUCTIONS
     assert "grid_data defaults and min/max layout constraints" in SERVER_INSTRUCTIONS
     assert "deterministic plain-create subset" in SERVER_INSTRUCTIONS
     assert "requires_options_lookup=true" in SERVER_INSTRUCTIONS
+    assert "exact paramName from the schema as param_name" in SERVER_INSTRUCTIONS
+    assert "options_lookup_params" in SERVER_INSTRUCTIONS
     assert "dashboard_id, dashboard_composition, and skills" in SERVER_INSTRUCTIONS
-    assert "Pass data_sources as a native array, not a JSON string" in SERVER_INSTRUCTIONS
-    assert "param_options_queries as a native array, not a JSON string" in SERVER_INSTRUCTIONS
+    assert "data_args_json" in SERVER_INSTRUCTIONS
+    assert "data_args_json must be a JSON object string" in SERVER_INSTRUCTIONS
+    assert "data_json as the raw text" in SERVER_INSTRUCTIONS
     assert "pass origin as the exact catalog value returned by list_available_widgets" in SERVER_INSTRUCTIONS
     assert "use that UUID for layout changes" in SERVER_INSTRUCTIONS
     assert "Never use a widget title or generic widget type" in SERVER_INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_workspace_tool_surface_excludes_removed_noop_fields() -> None:
+    """The public MCP schema should not expose removed pass-through fields."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    tools = await server.list_tools()
+    tool_names = {tool.name for tool in tools}
+
+    assert "execute_agent_tool" not in tool_names
+    assert "wait_for_previous" not in {
+        name
+        for tool in tools
+        for name in (tool.parameters.get("properties") or {})
+    }
+    assert {"manage_dashboard", "navigate_workspace", "update_widget_layout"}.issubset(
+        tool_names
+    )
+    assert {"create_dashboard", "read_dashboard", "update_dashboard"}.isdisjoint(
+        tool_names
+    )
+    assert {"navigate_to_dashboard", "switch_tab", "update_dashboard_layout"}.isdisjoint(
+        tool_names
+    )
+
+
+@pytest.mark.asyncio
+async def test_manage_dashboard_sends_settled_bridge_command() -> None:
+    """The grouped dashboard MCP tool should not emit removed bridge commands."""
+    state = RecordingBridgeState()
+    server = create_mcp_server(cast(BridgeSessionManager, state))
+
+    result = await server.call_tool("manage_dashboard", {"operation": "read"})
+
+    assert result.structured_content == {
+        "ok": True,
+        "command": "manage_dashboard",
+        "request_id": None,
+        "message": "ok",
+        "data": None,
+        "error": None,
+    }
+    assert len(state.commands) == 1
+    command = state.commands[0]
+    assert isinstance(command, ManageDashboardCommand)
+    assert command.command == "manage_dashboard"
+    assert command.operation == "read"
+
+
+@pytest.mark.asyncio
+async def test_navigate_workspace_sends_settled_bridge_command() -> None:
+    """The grouped navigation MCP tool should not emit removed bridge commands."""
+    state = RecordingBridgeState()
+    server = create_mcp_server(cast(BridgeSessionManager, state))
+
+    result = await server.call_tool(
+        "navigate_workspace",
+        {"operation": "tab", "tab_id": "tab-news"},
+    )
+
+    assert result.structured_content == {
+        "ok": True,
+        "command": "navigate_workspace",
+        "request_id": None,
+        "message": "ok",
+        "data": None,
+        "error": None,
+    }
+    assert len(state.commands) == 1
+    command = state.commands[0]
+    assert isinstance(command, NavigateWorkspaceCommand)
+    assert command.command == "navigate_workspace"
+    assert command.operation == "tab"
+    assert command.tab_id == "tab-news"
+
+
+@pytest.mark.asyncio
+async def test_text_generative_widgets_accept_raw_data_json_strings() -> None:
+    """Notes and HTML widgets should accept plain string content."""
+    state = RecordingBridgeState()
+    server = create_mcp_server(cast(BridgeSessionManager, state))
+
+    result = await server.call_tool(
+        "add_generative_widget",
+        {
+            "widget_type": "note",
+            "name": "Briefing",
+            "data_json": "# Briefing\n\nRaw markdown body.",
+        },
+    )
+
+    assert result.structured_content == {
+        "ok": True,
+        "command": "add_generative_widget",
+        "request_id": None,
+        "message": "ok",
+        "data": None,
+        "error": None,
+    }
+    assert len(state.commands) == 1
+    command = state.commands[0]
+    assert isinstance(command, AddGenerativeWidgetCommand)
+    assert command.data == "# Briefing\n\nRaw markdown body."
 
 
 def test_get_widget_schema_command_accepts_missing_origin_for_tool_error() -> None:
