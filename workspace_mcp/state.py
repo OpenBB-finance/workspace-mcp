@@ -11,6 +11,7 @@ from workspace_mcp.models import (
     BridgeErrorCode,
     BridgeError,
     BrowserSession,
+    BrowserSessionContext,
     BrowserSessionStartRequest,
     BrowserSessionStartResponse,
     CommandRequestEvent,
@@ -77,6 +78,8 @@ class BridgeSessionManager:
                 session_id=str(uuid4()),
                 token=str(uuid4()),
                 client_name=request.client_name,
+                current_dashboard_id=request.current_dashboard_id,
+                current_tab_id=request.current_tab_id,
             )
             self._browser = ConnectedBrowser(session=session)
             self._fail_pending_commands(
@@ -155,6 +158,16 @@ class BridgeSessionManager:
                     pending.future.set_result(payload.result)
                 return
 
+            if payload.type == "session_context_changed":
+                browser = self._require_session()
+                browser.session = browser.session.model_copy(
+                    update={
+                        "current_dashboard_id": payload.session.current_dashboard_id,
+                        "current_tab_id": payload.session.current_tab_id,
+                    }
+                )
+                return
+
             return
 
     async def execute_command(
@@ -197,7 +210,24 @@ class BridgeSessionManager:
                 "ok": True,
                 "browser_connected": bool(browser and browser.socket),
                 "pending_commands": len(self._pending_commands),
+                "session": (
+                    browser.session.model_dump(
+                        mode="json", exclude={"token"}, exclude_none=True
+                    )
+                    if browser
+                    else None
+                ),
             }
+
+    def get_session_context(self) -> BrowserSessionContext | None:
+        """Return the currently tracked dashboard and tab context, if any."""
+        browser = self._browser
+        if browser is None:
+            return None
+        return BrowserSessionContext(
+            current_dashboard_id=browser.session.current_dashboard_id,
+            current_tab_id=browser.session.current_tab_id,
+        )
 
     def _expire_command(self, request_id: str) -> None:
         pending = self._pending_commands.pop(request_id, None)

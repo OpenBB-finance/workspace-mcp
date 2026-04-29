@@ -52,6 +52,14 @@ class BrowserSessionStartRequest(Model):
 
     client_name: str = "workspace-ui"
     current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
+
+
+class BrowserSessionContext(Model):
+    """Tracked active Workspace context for one browser session."""
+
+    current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
 
 
 class BrowserSession(Model):
@@ -60,6 +68,8 @@ class BrowserSession(Model):
     session_id: str
     token: str
     client_name: str
+    current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
 
 
 class BrowserSessionStartResponse(Model):
@@ -352,8 +362,15 @@ class BrowserPing(Model):
     type: Literal["ping"]
 
 
+class BrowserSessionContextChangedMessage(Model):
+    """Browser-to-sidecar session context update."""
+
+    type: Literal["session_context_changed"]
+    session: BrowserSessionContext
+
+
 type BrowserMessage = Annotated[
-    BrowserCommandResultMessage | BrowserPing,
+    BrowserCommandResultMessage | BrowserPing | BrowserSessionContextChangedMessage,
     Field(discriminator="type"),
 ]
 

@@ -384,6 +384,21 @@ def param_options_payloads(items: list[ParamOptionsRequest]) -> list[dict[str, A
     ]
 
 
+def session_context_prompt_content(state: BridgeSessionManager) -> str:
+    """Describe the currently tracked dashboard and tab session context."""
+    session = state.get_session_context()
+    if session is None:
+        return "No Workspace browser session context is currently available."
+
+    dashboard_id = session.current_dashboard_id or "none"
+    tab_id = session.current_tab_id or "none"
+    return (
+        "Current Workspace browser session context: "
+        f"current_dashboard_id={dashboard_id}; "
+        f"current_tab_id={tab_id}."
+    )
+
+
 def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     """Create the Workspace MCP server with a flat v1 tool list."""
     server = FastMCP(
@@ -397,7 +412,18 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     )
     def workspace_tool_usage() -> list[dict[str, str]]:
         """Return a compact, generic usage prompt for MCP agents."""
-        return [{"role": "user", "content": SERVER_INSTRUCTIONS}]
+        return [
+            {"role": "user", "content": SERVER_INSTRUCTIONS},
+            {"role": "user", "content": session_context_prompt_content(state)},
+        ]
+
+    @server.prompt(
+        name="workspace_session_context",
+        description="Current tracked Workspace dashboard and tab context.",
+    )
+    def workspace_session_context() -> list[dict[str, str]]:
+        """Return the current tracked Workspace dashboard and tab context."""
+        return [{"role": "user", "content": session_context_prompt_content(state)}]
 
     async def run(command: Any) -> ToolResponse:
         try:
