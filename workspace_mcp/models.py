@@ -19,6 +19,7 @@ type GenerativeWidgetType = Literal["note", "table", "chart", "html"]
 type DashboardOperation = Literal["create", "read", "update"]
 type WorkspaceNavigationOperation = Literal["dashboard", "tab"]
 type BackendsOperation = Literal["list", "add", "update", "refresh", "remove"]
+type AppsOperation = Literal["list", "read", "instantiate"]
 type EndpointHeaderLocation = Literal["headers", "query"]
 type BridgePayload = dict[str, Any]
 type BridgePayloadList = list[BridgePayload]
@@ -169,6 +170,7 @@ class ListAvailableWidgetsCommand(Model):
     command: Literal["list_available_widgets"]
     request_id: str | None = None
     origin: str | None = None
+    backend_id: str | None = None
 
 
 class GetWidgetSchemaCommand(Model):
@@ -341,6 +343,19 @@ class ManageBackendsCommand(Model):
     is_openbb_platform: bool | None = None
 
 
+class ManageAppsCommand(Model):
+    """List, read, or instantiate apps from a Workspace data backend."""
+
+    command: Literal["manage_apps"]
+    request_id: str | None = None
+    operation: AppsOperation
+    backend_id: str
+    app_name: str | None = None
+    template_id: str | None = None
+    dashboard_name: str | None = None
+    activate: bool | None = None
+
+
 type WorkspaceCommand = Annotated[
     GetWidgetDataCommand
     | ListAvailableWidgetsCommand
@@ -358,7 +373,8 @@ type WorkspaceCommand = Annotated[
     | AssignTasksToAgentsCommand
     | GetSkillContentCommand
     | GetWorkspaceSnapshotCommand
-    | ManageBackendsCommand,
+    | ManageBackendsCommand
+    | ManageAppsCommand,
     Field(discriminator="command"),
 ]
 

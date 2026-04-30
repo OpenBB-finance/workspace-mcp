@@ -16,6 +16,7 @@ from workspace_mcp.models import (
     GetWidgetDataCommand,
     GetWidgetSchemaCommand,
     ListAvailableWidgetsCommand,
+    ManageAppsCommand,
     ManageBackendsCommand,
     ManageDashboardCommand,
     ManageNavigationBarCommand,
@@ -85,8 +86,16 @@ WIDGET_INSTANCE_GUIDANCE = (
     "identifier."
 )
 DASHBOARD_TARGETING_GUIDANCE = (
-    "To target the current dashboard route, omit dashboard_id. Do not send placeholder "
-    "strings such as active_dashboard, current_dashboard, null, or undefined."
+    "Resolve dashboard_id from current_dashboard_uuid before each write. Every "
+    "successful command result includes session_context.current_dashboard_uuid "
+    "(and current_tab_id) — reuse that from the previous response instead of "
+    "calling get_workspace_snapshot again. Use get_workspace_snapshot only on "
+    "the first call, or after a navigation step that may have invalidated the "
+    "tracked context. Never match dashboards by name: duplicates with identical "
+    "names are common. \"This dashboard\" means the current route; resolve via "
+    "current_dashboard_uuid, not title. Omitting dashboard_id also targets the "
+    "current route, but do not send placeholder strings such as active_dashboard, "
+    "current_dashboard, null, or undefined."
 )
 EXISTING_DASHBOARD_GUIDANCE = (
     "These tools operate on an existing dashboard only. They do not create dashboards."
@@ -533,18 +542,25 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "List widgets available to the current Workspace session.",
             "Returns deterministic widget identities for later get_widget_schema and create_widget calls.",
+            "Optional filters: origin matches the friendly catalog label exactly (e.g. 'Options Activity Monitor'), "
+            "backend_id matches the backend UUID returned by manage_backends. "
+            "Use backend_id when you have a UUID from manage_backends; use origin when working from a snapshot. "
+            "Both can be passed together for a stricter match. Without filters the entire catalog is returned, "
+            "which can be hundreds of widgets — prefer a filter when you know the source.",
             "Generative-only note widgets such as rich_note are intentionally excluded; use add_generative_widget for those.",
             "Widgets that still require runtime-only bootstrap are also excluded until their plain create contract is deterministic.",
         )
     )
     async def list_available_widgets(
         origin: str | None = None,
+        backend_id: str | None = None,
     ) -> ToolResponse:
         """List widgets that can be created in the current Workspace session."""
         return await run(
             ListAvailableWidgetsCommand(
                 command="list_available_widgets",
                 origin=origin,
+                backend_id=backend_id,
             )
         )
 
@@ -1099,6 +1115,62 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 endpoint_headers=endpoint_headers,
                 validate_widgets=validate_widgets,
                 is_openbb_platform=is_openbb_platform,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "List, read, or instantiate apps from a Workspace data backend.",
+            "Apps are full dashboard templates declared in the backend's apps.json: "
+            "they bundle tabs, widget layouts, parameter groups, and suggested prompts. "
+            "Instantiating one is the programmatic equivalent of clicking an app in the gallery.",
+            "Requires operation from {list, read, instantiate} and backend_id. "
+            "Use manage_backends operation='list' to discover backend_id values and app_count.",
+            "For list, returns each app with name, template_id, description, tab_count, "
+            "group_count, prompt_count, and allow_customization.",
+            "For read, requires app_name (or template_id); returns the full app definition "
+            "including tabs with layouts, parameter groups, and suggested prompts.",
+            "For instantiate, requires app_name (or template_id); creates a fresh dashboard "
+            "from the app template and returns its dashboard_id. Pass that dashboard_id to "
+            "subsequent dashboard-targeting tools. activate defaults to true and routes the "
+            "browser to the new dashboard.",
+        )
+    )
+    async def manage_apps(
+        operation: str,
+        backend_id: str,
+        app_name: str | None = None,
+        template_id: str | None = None,
+        dashboard_name: str | None = None,
+        activate: bool | None = None,
+    ) -> ToolResponse:
+        """List, read, or instantiate apps declared in a backend's apps.json."""
+        allowed_operations: set[str] = {"list", "read", "instantiate"}
+        if operation not in allowed_operations:
+            return invalid_request(
+                "manage_apps",
+                "manage_apps requires operation from {list, read, instantiate}.",
+            )
+        if not backend_id:
+            return invalid_request(
+                "manage_apps",
+                "manage_apps requires backend_id.",
+            )
+        if operation in {"read", "instantiate"} and not app_name and not template_id:
+            return invalid_request(
+                "manage_apps",
+                f"manage_apps operation='{operation}' requires app_name or template_id.",
+            )
+
+        return await run(
+            ManageAppsCommand(
+                command="manage_apps",
+                operation=cast(Any, operation),
+                backend_id=backend_id,
+                app_name=app_name,
+                template_id=template_id,
+                dashboard_name=dashboard_name,
+                activate=activate,
             )
         )
 

@@ -170,7 +170,8 @@ async def test_execute_command_round_trip(
 
     result = await task
     assert result.ok is True
-    assert result.data == {"widget_uuid": "widget-1"}
+    assert result.data["widget_uuid"] == "widget-1"
+    assert "session_context" in result.data
 
 
 @pytest.mark.asyncio
@@ -262,7 +263,8 @@ async def test_read_widget_accepts_widget_id_alias(
 
     result = await task
     assert result.ok is True
-    assert result.data == {"widget_uuid": "widget-instance-1"}
+    assert result.data["widget_uuid"] == "widget-instance-1"
+    assert "session_context" in result.data
 
 
 @pytest.mark.asyncio
@@ -313,6 +315,95 @@ async def test_stale_disconnect_does_not_drop_replacement_browser(
     result = await task
 
     assert result.ok is True
+
+
+@pytest.mark.asyncio
+async def test_session_context_is_injected_into_successful_results(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Successful command results should carry the tracked session context."""
+    socket = await connect_browser(bridge_manager)
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "session_context_changed",
+            "session": {
+                "current_dashboard_id": "dash-active",
+                "current_tab_id": "tab-overview",
+            },
+        }
+    )
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command(
+            {"command": "read_widget", "widget_uuid": "widget-1"}
+        )
+    )
+
+    await asyncio.sleep(0)
+    request_id = socket.messages[0]["command"]["request_id"]
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=True,
+                command="read_widget",
+                request_id=request_id,
+                message="Widget loaded.",
+                data={"widget_uuid": "widget-1"},
+            ).model_dump(mode="json"),
+        }
+    )
+
+    result = await task
+    assert result.data["session_context"] == {
+        "current_dashboard_uuid": "dash-active",
+        "current_tab_id": "tab-overview",
+    }
+
+
+@pytest.mark.asyncio
+async def test_session_context_is_not_injected_into_error_results(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Error results have no data dict to enrich; injection must be skipped."""
+    socket = await connect_browser(bridge_manager)
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "session_context_changed",
+            "session": {
+                "current_dashboard_id": "dash-active",
+                "current_tab_id": None,
+            },
+        }
+    )
+
+    task = asyncio.create_task(
+        bridge_manager.execute_command(
+            {"command": "read_widget", "widget_uuid": "missing"}
+        )
+    )
+
+    await asyncio.sleep(0)
+    request_id = socket.messages[0]["command"]["request_id"]
+
+    await bridge_manager.handle_browser_message(
+        {
+            "type": "command_result",
+            "result": WorkspaceCommandResult(
+                ok=False,
+                command="read_widget",
+                request_id=request_id,
+                message="Widget not found.",
+            ).model_dump(mode="json"),
+        }
+    )
+
+    result = await task
+    assert result.ok is False
+    assert result.data is None
 
 
 async def connect_browser(bridge_manager: BridgeSessionManager) -> FakeSocket:

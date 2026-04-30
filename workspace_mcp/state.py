@@ -274,26 +274,51 @@ class BridgeSessionManager:
     async def _normalize_result(
         self, *, command_name: str, result: WorkspaceCommandResult
     ) -> WorkspaceCommandResult:
-        if command_name != "get_workspace_snapshot" or not result.ok:
-            return result
-
-        try:
-            snapshot = WorkspaceSnapshot.model_validate(result.data)
-        except ValidationError as error:
-            return self._result_error(
-                command=command_name,
-                request_id=result.request_id,
-                code="invalid_request",
-                message="Browser returned an invalid workspace snapshot payload.",
-                details={"errors": error.errors()},
+        if command_name == "get_workspace_snapshot" and result.ok:
+            try:
+                snapshot = WorkspaceSnapshot.model_validate(result.data)
+            except ValidationError as error:
+                return self._result_error(
+                    command=command_name,
+                    request_id=result.request_id,
+                    code="invalid_request",
+                    message="Browser returned an invalid workspace snapshot payload.",
+                    details={"errors": error.errors()},
+                )
+            result = result.model_copy(
+                update={
+                    "data": snapshot.model_dump(
+                        mode="json", exclude_defaults=True, exclude_none=True
+                    )
+                }
             )
 
+        return self._inject_session_context(result)
+
+    def _inject_session_context(
+        self, result: WorkspaceCommandResult
+    ) -> WorkspaceCommandResult:
+        """Annotate every successful command result with the tracked session context.
+
+        Saves callers a follow-up get_workspace_snapshot before any safe write.
+        For commands that just navigated (manage_dashboard create activate=true,
+        navigate_workspace dashboard), the explicit dashboard_id in the same
+        response is authoritative — session_context may lag by one round-trip
+        until the browser fires session_context_changed.
+        """
+        if not result.ok or not isinstance(result.data, dict):
+            return result
+        if "session_context" in result.data:
+            return result
+        ctx = self.get_session_context()
+        if ctx is None:
+            return result
+        ctx_payload = {
+            "current_dashboard_uuid": ctx.current_dashboard_id,
+            "current_tab_id": ctx.current_tab_id,
+        }
         return result.model_copy(
-            update={
-                "data": snapshot.model_dump(
-                    mode="json", exclude_defaults=True, exclude_none=True
-                )
-            }
+            update={"data": {**result.data, "session_context": ctx_payload}}
         )
 
     @staticmethod
