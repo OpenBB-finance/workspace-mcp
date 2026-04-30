@@ -8,6 +8,7 @@ from fastmcp import FastMCP
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     AssignTasksToAgentsCommand,
+    BackendEndpointHeader,
     CreateWidgetCommand,
     DeleteWidgetCommand,
     GetParamOptionsCommand,
@@ -15,6 +16,7 @@ from workspace_mcp.models import (
     GetWidgetDataCommand,
     GetWidgetSchemaCommand,
     ListAvailableWidgetsCommand,
+    ManageBackendsCommand,
     ManageDashboardCommand,
     ManageNavigationBarCommand,
     NavigateWorkspaceCommand,
@@ -69,7 +71,12 @@ GENERATIVE_WIDGET_GUIDANCE = (
     "array of objects plus chart_params_json as a JSON object with chartType, "
     "xKey, and non-empty yKey. "
     "Use widget_type='note' for rich text notes such as rich_note. "
-    "The response includes widget_uuid; use that UUID for layout changes."
+    "The response includes widget_uuid; use that UUID for layout changes. "
+    "The inner_tab argument only places the new widget on an existing navigation tab; "
+    "it does not create a tab. To put a generated widget on a new tab, first call "
+    'manage_navigation_bar operation="add_tabs" with tabs_json such as [{"name":"AAPL Analysis"}], '
+    "then navigate_workspace to the generated slug tab_id such as aapl-analysis, "
+    "then call add_generative_widget without inner_tab so it lands on the active tab."
 )
 WIDGET_INSTANCE_GUIDANCE = (
     "Prefer widget_uuid for read, update, and delete. widget_id is only a fallback "
@@ -101,7 +108,10 @@ LAYOUT_GUIDANCE = (
 NAVIGATION_BAR_GUIDANCE = (
     "manage_navigation_bar manages the navigation_bar widget inside an existing dashboard. "
     "If the dashboard does not already have a navigation_bar widget, call create first. "
-    "Its create operation creates or initializes navigation tabs on that dashboard; it does not create a dashboard."
+    "Its create operation creates or initializes navigation tabs on that dashboard; it does not create a dashboard. "
+    "For create, add_tabs, and remove_tabs, tabs_json must be a JSON array of objects, "
+    'for example [{"name":"AAPL Analysis"}]. Each object must use only the key name, not tab_id or tab_name. '
+    'Do not pass a JSON array of strings such as ["AAPL Analysis"].'
 )
 DISCOVERY_WORKFLOW = (
     "Recommended workflow: call get_workspace_snapshot first, manage_dashboard "
@@ -116,7 +126,11 @@ DISCOVERY_WORKFLOW = (
     "with widget_type='note'. Use manage_dashboard operation='read' or "
     "get_workspace_snapshot.dashboard_composition "
     "to inspect visible layout and update_widget_layout to move or resize "
-    "widgets."
+    "widgets. When asked to put content on a new tab, create the tab first with "
+    "manage_navigation_bar add_tabs using tabs_json objects with only name, then "
+    "navigate_workspace to the generated slug tab_id, then create the widget without "
+    "inner_tab or move an existing widget with update_widget_layout. Do not assume "
+    "add_generative_widget inner_tab creates the tab."
 )
 SERVER_INSTRUCTIONS = " ".join(
     [
@@ -280,6 +294,32 @@ def parse_json_dict(
             )
         )
     return value
+
+
+def validate_navigation_tabs(
+    operation: str,
+    tabs: list[dict[str, Any]],
+) -> ToolResponse | None:
+    """Validate navigation-tab payloads before forwarding to the browser."""
+    if operation not in {"create", "add_tabs", "remove_tabs"}:
+        return None
+
+    for item in tabs:
+        if "tab_id" in item or "tab_name" in item:
+            return invalid_request(
+                "manage_navigation_bar",
+                "manage_navigation_bar tabs_json items must not include tab_id or tab_name; "
+                'use only {"name":"AAPL Analysis"}. The tab_id is generated as the slug of name.',
+            )
+        name = item.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return invalid_request(
+                "manage_navigation_bar",
+                "manage_navigation_bar tabs_json items must be objects with a non-empty string 'name' field, "
+                'for example [{"name":"AAPL Analysis"}]. Do not use tab_id/tab_name keys.',
+            )
+
+    return None
 
 
 def parse_json_value(
@@ -817,6 +857,11 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Create or mutate the Workspace navigation bar.",
             "Requires operation from {create, add_tabs, remove_tabs, rename_tabs}.",
+            'For add_tabs, pass tabs_json as a JSON array of objects, for example [{"name":"AAPL Analysis"}].',
+            'The only tab object field for create/add/remove is name; do not send tab_id or tab_name. The tab_id is generated as the slug of name.',
+            'Do not pass tabs_json as ["AAPL Analysis"]; string arrays are rejected.',
+            'After add_tabs, navigate to the generated slug tab_id, e.g. AAPL Analysis -> aapl-analysis, before creating content for that tab.',
+            'For rename_tabs, pass rename_map_json as a JSON object, for example {"old-tab-id":"New Name"}.',
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
             NAVIGATION_BAR_GUIDANCE,
@@ -852,6 +897,9 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 "manage_navigation_bar",
                 f"manage_navigation_bar operation='{operation}' requires tabs_json.",
             )
+        tab_error = validate_navigation_tabs(operation, tabs)
+        if tab_error:
+            return tab_error
         if operation == "rename_tabs" and not rename_map:
             return invalid_request(
                 "manage_navigation_bar",
@@ -871,6 +919,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         description=describe_tool(
             "Create a generated note, table, chart, or HTML widget.",
             "Requires widget_type from {note, table, chart, html}.",
+            "inner_tab targets an existing navigation tab only; it does not create a new tab.",
+            'For a new tab workflow, call manage_navigation_bar operation="add_tabs" with tabs_json like [{"name":"AAPL Analysis"}], navigate_workspace to the generated slug tab_id, then call add_generative_widget without inner_tab.',
             GENERATIVE_WIDGET_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
@@ -963,6 +1013,92 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 command="get_skill_content",
                 slug=slug,
                 reason=reason,
+            )
+        )
+
+    @server.tool(
+        description=describe_tool(
+            "Manage Workspace data backends (the connections that power widgets).",
+            "Requires operation from {list, add, update, refresh, remove}.",
+            "For list, returns each backend with id, name, url, status, and widget/app/agent counts.",
+            "For add, requires name and url. Optional endpoint_headers_json is a JSON array of "
+            '{"key", "value", "location"} where location is "headers" (default) or "query". '
+            "validate_widgets defaults to true and surfaces a warning if widgets fail to load.",
+            "For update, requires backend_id and at least one of name, url, or endpoint_headers_json.",
+            "For refresh, requires backend_id; re-fetches widgets and templates from the backend URL.",
+            "For remove, requires backend_id.",
+        )
+    )
+    async def manage_backends(
+        operation: str,
+        backend_id: str | None = None,
+        name: str | None = None,
+        url: str | None = None,
+        endpoint_headers_json: str | None = None,
+        validate_widgets: bool | None = None,
+        is_openbb_platform: bool | None = None,
+    ) -> ToolResponse:
+        """List, add, update, refresh, or remove Workspace data backends."""
+        allowed_operations: set[str] = {"list", "add", "update", "refresh", "remove"}
+        if operation not in allowed_operations:
+            return invalid_request(
+                "manage_backends",
+                "manage_backends requires operation from {list, add, update, refresh, remove}.",
+            )
+
+        endpoint_headers: list[BackendEndpointHeader] | None = None
+        if endpoint_headers_json is not None:
+            try:
+                raw_headers = parse_json_list(
+                    "manage_backends", "endpoint_headers_json", endpoint_headers_json
+                )
+            except JsonArgumentError as error:
+                return error.response
+            try:
+                endpoint_headers = [
+                    BackendEndpointHeader.model_validate(item) for item in raw_headers
+                ]
+            except Exception:
+                return invalid_request(
+                    "manage_backends",
+                    "manage_backends endpoint_headers_json items must be objects with "
+                    "string 'key' and 'value' fields and optional 'location' as 'headers' or 'query'.",
+                )
+
+        if operation == "add":
+            if not name or not url:
+                return invalid_request(
+                    "manage_backends",
+                    "manage_backends operation='add' requires name and url.",
+                )
+        elif operation in {"update", "refresh", "remove"}:
+            if not backend_id:
+                return invalid_request(
+                    "manage_backends",
+                    f"manage_backends operation='{operation}' requires backend_id.",
+                )
+            if operation == "update" and not (
+                name
+                or url
+                or endpoint_headers is not None
+                or is_openbb_platform is not None
+            ):
+                return invalid_request(
+                    "manage_backends",
+                    "manage_backends operation='update' requires at least one of "
+                    "name, url, endpoint_headers_json, or is_openbb_platform.",
+                )
+
+        return await run(
+            ManageBackendsCommand(
+                command="manage_backends",
+                operation=cast(Any, operation),
+                backend_id=backend_id,
+                name=name,
+                url=url,
+                endpoint_headers=endpoint_headers,
+                validate_widgets=validate_widgets,
+                is_openbb_platform=is_openbb_platform,
             )
         )
 

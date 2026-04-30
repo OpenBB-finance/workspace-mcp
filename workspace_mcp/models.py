@@ -18,6 +18,8 @@ type NavigationOperation = Literal["create", "add_tabs", "remove_tabs", "rename_
 type GenerativeWidgetType = Literal["note", "table", "chart", "html"]
 type DashboardOperation = Literal["create", "read", "update"]
 type WorkspaceNavigationOperation = Literal["dashboard", "tab"]
+type BackendsOperation = Literal["list", "add", "update", "refresh", "remove"]
+type EndpointHeaderLocation = Literal["headers", "query"]
 type BridgePayload = dict[str, Any]
 type BridgePayloadList = list[BridgePayload]
 
@@ -317,6 +319,28 @@ class GetWorkspaceSnapshotCommand(Model):
     request_id: str | None = None
 
 
+class BackendEndpointHeader(Model):
+    """One header or query parameter sent to a Workspace backend."""
+
+    key: str
+    value: str
+    location: EndpointHeaderLocation = "headers"
+
+
+class ManageBackendsCommand(Model):
+    """List, add, update, refresh, or remove Workspace data backends."""
+
+    command: Literal["manage_backends"]
+    request_id: str | None = None
+    operation: BackendsOperation
+    backend_id: str | None = None
+    name: str | None = None
+    url: str | None = None
+    endpoint_headers: list[BackendEndpointHeader] | None = None
+    validate_widgets: bool | None = None
+    is_openbb_platform: bool | None = None
+
+
 type WorkspaceCommand = Annotated[
     GetWidgetDataCommand
     | ListAvailableWidgetsCommand
@@ -333,7 +357,8 @@ type WorkspaceCommand = Annotated[
     | AddGenerativeWidgetCommand
     | AssignTasksToAgentsCommand
     | GetSkillContentCommand
-    | GetWorkspaceSnapshotCommand,
+    | GetWorkspaceSnapshotCommand
+    | ManageBackendsCommand,
     Field(discriminator="command"),
 ]
 

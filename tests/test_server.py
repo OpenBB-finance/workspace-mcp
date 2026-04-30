@@ -27,6 +27,7 @@ from workspace_mcp.server import (
     is_generative_only_widget,
     param_options_payloads,
     validate_add_generative_widget_request,
+    validate_navigation_tabs,
 )
 from workspace_mcp.state import BridgeSessionManager
 
@@ -320,6 +321,42 @@ def test_invalid_request_builds_standard_tool_error() -> None:
             "retryable": False,
         },
     }
+
+
+def test_validate_navigation_tabs_rejects_tab_id_tab_name_shape() -> None:
+    """Navigation-bar tabs must use the browser helper's {name} shape."""
+    response = validate_navigation_tabs(
+        "add_tabs",
+        [{"tab_id": "aapl-analysis", "tab_name": "AAPL Analysis"}],
+    )
+
+    assert response is not None
+    assert response["ok"] is False
+    assert response["command"] == "manage_navigation_bar"
+    assert response["message"] == (
+        "manage_navigation_bar tabs_json items must not include tab_id or tab_name; "
+        'use only {"name":"AAPL Analysis"}. The tab_id is generated as the slug of name.'
+    )
+
+
+def test_validate_navigation_tabs_rejects_extra_tab_id_with_name() -> None:
+    """Navigation-bar tabs should not accept ignored tab_id fields."""
+    response = validate_navigation_tabs(
+        "add_tabs",
+        [{"tab_id": "aapl-analysis", "name": "AAPL Analysis"}],
+    )
+
+    assert response is not None
+    assert response["ok"] is False
+    assert response["message"] == (
+        "manage_navigation_bar tabs_json items must not include tab_id or tab_name; "
+        'use only {"name":"AAPL Analysis"}. The tab_id is generated as the slug of name.'
+    )
+
+
+def test_validate_navigation_tabs_accepts_name_shape() -> None:
+    """Navigation-bar tabs should accept the documented {name} shape."""
+    assert validate_navigation_tabs("add_tabs", [{"name": "AAPL Analysis"}]) is None
 
 
 def test_is_generative_only_widget_identifies_rich_note() -> None:

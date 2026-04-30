@@ -16,6 +16,9 @@ Install:
 
 ```bash
 uv tool install --python 3.13 git+https://github.com/OpenBB-finance/workspace-mcp.git
+
+# If installing from a PR
+uv tool install --force --editable --python 3.13 .
 ```
 
 Run:
