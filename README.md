@@ -70,6 +70,8 @@ MCP tools:
 - `delete_widget`
 - `manage_navigation_bar`
 - `add_generative_widget`
+- `manage_backends`
+- `manage_apps`
 - `assign_tasks_to_agents`
 - `get_skill_content`
 
