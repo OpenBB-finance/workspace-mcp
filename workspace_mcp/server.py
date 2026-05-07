@@ -6,6 +6,7 @@ from typing import Any, cast
 from fastmcp import FastMCP
 from pydantic import ValidationError
 
+from workspace_mcp.app_builder import register_app_builder_resources
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
     AssignTasksToAgentsCommand,
@@ -455,6 +456,8 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
         name="OpenBB Workspace MCP",
         instructions=SERVER_INSTRUCTIONS,
     )
+
+    register_app_builder_resources(server)
 
     @server.prompt(
         name="workspace_tool_usage",

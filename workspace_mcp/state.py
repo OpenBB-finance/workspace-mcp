@@ -315,7 +315,7 @@ class BridgeSessionManager:
             return result
         ctx_payload = {
             "current_dashboard_uuid": ctx.current_dashboard_id,
-            "current_tab_id": ctx.current_tab_id,
+            "current_tab_id": ctx.current_tab_id
         }
         return result.model_copy(
             update={"data": {**result.data, "session_context": ctx_payload}}
