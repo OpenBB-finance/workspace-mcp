@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from openbb_ai.models import AgentTool, WorkspaceState
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 type BridgeErrorCode = Literal[
     "invalid_request",
@@ -327,6 +327,39 @@ class BackendEndpointHeader(Model):
     key: str
     value: str
     location: EndpointHeaderLocation = "headers"
+
+
+class NavigationTabInput(Model):
+    """One tab to create or remove on a navigation bar.
+
+    The frontend handler (``useManageNavigationBar``) reads only ``name`` and
+    derives ``tab_id`` as the slug of ``name``. ``extra="forbid"`` on the base
+    ``Model`` rejects accidental ``tab_id`` / ``tab_name`` fields, so the
+    common LLM mistake fails validation instead of silently writing the wrong
+    shape to the bridge.
+    """
+
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_be_non_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("name must not be blank")
+        return value
+
+
+class TaskRequest(Model):
+    """One task delegated to an external Workspace agent.
+
+    Field names match the frontend Zod schema in
+    ``terminalpro/src/components/AI/.../ai.ts`` (``taskRequestsSchema``).
+    """
+
+    id: str
+    description: str
+    assigned_holder_url: str
+    assigned_agent_id: str
 
 
 class ManageBackendsCommand(Model):
