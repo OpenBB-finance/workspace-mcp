@@ -65,7 +65,10 @@ async def test_workspace_tool_usage_prompt_is_registered() -> None:
 
     prompts = await server.list_prompts()
 
-    assert {prompt.name for prompt in prompts} == {"workspace_tool_usage"}
+    assert {prompt.name for prompt in prompts} == {
+        "workspace_tool_usage",
+        "workspace_session_context",
+    }
     assert prompts[0].description == (
         "Generic guidance for using the OpenBB Workspace MCP tool surface."
     )

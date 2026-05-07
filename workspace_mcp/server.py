@@ -4,6 +4,7 @@ import json
 from typing import Any, cast
 
 from fastmcp import FastMCP
+from pydantic import ValidationError
 
 from workspace_mcp.models import (
     AddGenerativeWidgetCommand,
@@ -1074,7 +1075,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
                 endpoint_headers = [
                     BackendEndpointHeader.model_validate(item) for item in raw_headers
                 ]
-            except Exception:
+            except ValidationError:
                 return invalid_request(
                     "manage_backends",
                     "manage_backends endpoint_headers_json items must be objects with "

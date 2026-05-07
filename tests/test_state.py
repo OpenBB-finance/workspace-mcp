@@ -170,6 +170,7 @@ async def test_execute_command_round_trip(
 
     result = await task
     assert result.ok is True
+    assert isinstance(result.data, dict)
     assert result.data["widget_uuid"] == "widget-1"
     assert "session_context" in result.data
 
@@ -263,6 +264,7 @@ async def test_read_widget_accepts_widget_id_alias(
 
     result = await task
     assert result.ok is True
+    assert isinstance(result.data, dict)
     assert result.data["widget_uuid"] == "widget-instance-1"
     assert "session_context" in result.data
 
@@ -357,6 +359,7 @@ async def test_session_context_is_injected_into_successful_results(
     )
 
     result = await task
+    assert isinstance(result.data, dict)
     assert result.data["session_context"] == {
         "current_dashboard_uuid": "dash-active",
         "current_tab_id": "tab-overview",
