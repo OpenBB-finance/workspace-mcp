@@ -16,6 +16,9 @@ Install:
 
 ```bash
 uv tool install --python 3.13 git+https://github.com/OpenBB-finance/workspace-mcp.git
+
+# If installing from a PR
+uv tool install --force --editable --python 3.13 .
 ```
 
 Run:
@@ -45,22 +48,22 @@ Example `.mcp.json` for claude code:
       "type": "http",
       "url": "http://127.0.0.1:8787/mcp"
     }
+  }
 }
 ```
 
 ## Features
 
-Current MCP surface:
+MCP tools:
 
 - `get_workspace_snapshot`
 - `list_available_widgets`
 - `get_widget_schema`
 - `get_widget_data`
 - `get_params_options`
-- `create_dashboard`
-- `read_dashboard`
-- `update_dashboard`
-- `update_dashboard_layout`
+- `manage_dashboard`
+- `navigate_workspace`
+- `update_widget_layout`
 - `read_widget`
 - `create_widget`
 - `update_widget`
@@ -68,10 +71,9 @@ Current MCP surface:
 - `manage_navigation_bar`
 - `add_generative_widget`
 - `assign_tasks_to_agents`
-- `execute_agent_tool`
 - `get_skill_content`
 
-Current scope:
+Scope:
 
 - single user
 - one connected Workspace browser session

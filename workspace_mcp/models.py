@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 from uuid import uuid4
 
 from openbb_ai.models import AgentTool, WorkspaceState
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter
+from pydantic import AliasChoices, BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 type BridgeErrorCode = Literal[
     "invalid_request",
@@ -16,6 +16,11 @@ type BridgeErrorCode = Literal[
 ]
 type NavigationOperation = Literal["create", "add_tabs", "remove_tabs", "rename_tabs"]
 type GenerativeWidgetType = Literal["note", "table", "chart", "html"]
+type DashboardOperation = Literal["create", "read", "update"]
+type WorkspaceNavigationOperation = Literal["dashboard", "tab"]
+type BackendsOperation = Literal["list", "add", "update", "refresh", "remove"]
+type AppsOperation = Literal["list", "read", "instantiate"]
+type EndpointHeaderLocation = Literal["headers", "query"]
 type BridgePayload = dict[str, Any]
 type BridgePayloadList = list[BridgePayload]
 
@@ -50,6 +55,14 @@ class BrowserSessionStartRequest(Model):
 
     client_name: str = "workspace-ui"
     current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
+
+
+class BrowserSessionContext(Model):
+    """Tracked active Workspace context for one browser session."""
+
+    current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
 
 
 class BrowserSession(Model):
@@ -58,6 +71,8 @@ class BrowserSession(Model):
     session_id: str
     token: str
     client_name: str
+    current_dashboard_id: str | None = None
+    current_tab_id: str | None = None
 
 
 class BrowserSessionStartResponse(Model):
@@ -155,6 +170,7 @@ class ListAvailableWidgetsCommand(Model):
     command: Literal["list_available_widgets"]
     request_id: str | None = None
     origin: str | None = None
+    backend_id: str | None = None
 
 
 class GetWidgetSchemaCommand(Model):
@@ -216,49 +232,25 @@ class DeleteWidgetCommand(Model):
     widget_id: str | None = None
 
 
-class CreateDashboardCommand(Model):
-    """Create one dashboard in the local Workspace session."""
+class ManageDashboardCommand(Model):
+    """Create, read, or update dashboard metadata and composition."""
 
-    command: Literal["create_dashboard"]
+    command: Literal["manage_dashboard"]
     request_id: str | None = None
-    name: str
+    operation: DashboardOperation
     dashboard_id: str | None = None
-    activate: bool = True
-
-
-class UpdateDashboardCommand(Model):
-    """Update light metadata for one dashboard."""
-
-    command: Literal["update_dashboard"]
-    request_id: str | None = None
-    dashboard_id: str
     name: str | None = None
+    activate: bool | None = None
 
 
-class NavigateToDashboardCommand(Model):
-    """Navigate the Workspace browser to a specific dashboard."""
+class NavigateWorkspaceCommand(Model):
+    """Navigate the Workspace browser to an existing dashboard or inner tab."""
 
-    command: Literal["navigate_to_dashboard"]
+    command: Literal["navigate_workspace"]
     request_id: str | None = None
-    dashboard_id: str
+    operation: WorkspaceNavigationOperation
+    dashboard_id: str | None = None
     tab_id: str | None = None
-
-
-class SwitchTabCommand(Model):
-    """Switch to a specific inner tab on the current or target dashboard."""
-
-    command: Literal["switch_tab"]
-    request_id: str | None = None
-    dashboard_id: str | None = None
-    tab_id: str
-
-
-class ReadDashboardCommand(Model):
-    """Read one dashboard's deterministic composition."""
-
-    command: Literal["read_dashboard"]
-    request_id: str | None = None
-    dashboard_id: str | None = None
 
 
 class UpdateDashboardLayoutCommand(Model):
@@ -313,16 +305,6 @@ class AssignTasksToAgentsCommand(Model):
     task_requests: BridgePayloadList = Field(default_factory=list)
 
 
-class ExecuteAgentToolCommand(Model):
-    """Execute one MCP tool through Workspace's agent-tool executor."""
-
-    command: Literal["execute_agent_tool"]
-    request_id: str | None = None
-    server_id: str
-    tool_name: str
-    parameters: BridgePayload = Field(default_factory=dict)
-
-
 class GetSkillContentCommand(Model):
     """Load one skill body from the Workspace skill library."""
 
@@ -339,6 +321,74 @@ class GetWorkspaceSnapshotCommand(Model):
     request_id: str | None = None
 
 
+class BackendEndpointHeader(Model):
+    """One header or query parameter sent to a Workspace backend."""
+
+    key: str
+    value: str
+    location: EndpointHeaderLocation = "headers"
+
+
+class NavigationTabInput(Model):
+    """One tab to create or remove on a navigation bar.
+
+    The frontend handler (``useManageNavigationBar``) reads only ``name`` and
+    derives ``tab_id`` as the slug of ``name``. ``extra="forbid"`` on the base
+    ``Model`` rejects accidental ``tab_id`` / ``tab_name`` fields, so the
+    common LLM mistake fails validation instead of silently writing the wrong
+    shape to the bridge.
+    """
+
+    name: str
+
+    @field_validator("name")
+    @classmethod
+    def _name_must_be_non_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("name must not be blank")
+        return value
+
+
+class TaskRequest(Model):
+    """One task delegated to an external Workspace agent.
+
+    Field names match the frontend Zod schema in
+    ``terminalpro/src/components/AI/.../ai.ts`` (``taskRequestsSchema``).
+    """
+
+    id: str
+    description: str
+    assigned_holder_url: str
+    assigned_agent_id: str
+
+
+class ManageBackendsCommand(Model):
+    """List, add, update, refresh, or remove Workspace data backends."""
+
+    command: Literal["manage_backends"]
+    request_id: str | None = None
+    operation: BackendsOperation
+    backend_id: str | None = None
+    name: str | None = None
+    url: str | None = None
+    endpoint_headers: list[BackendEndpointHeader] | None = None
+    validate_widgets: bool | None = None
+    is_openbb_platform: bool | None = None
+
+
+class ManageAppsCommand(Model):
+    """List, read, or instantiate apps from a Workspace data backend."""
+
+    command: Literal["manage_apps"]
+    request_id: str | None = None
+    operation: AppsOperation
+    backend_id: str
+    app_name: str | None = None
+    template_id: str | None = None
+    dashboard_name: str | None = None
+    activate: bool | None = None
+
+
 type WorkspaceCommand = Annotated[
     GetWidgetDataCommand
     | ListAvailableWidgetsCommand
@@ -348,18 +398,16 @@ type WorkspaceCommand = Annotated[
     | CreateWidgetCommand
     | UpdateWidgetCommand
     | DeleteWidgetCommand
-    | CreateDashboardCommand
-    | ReadDashboardCommand
-    | UpdateDashboardCommand
+    | ManageDashboardCommand
     | UpdateDashboardLayoutCommand
-    | NavigateToDashboardCommand
-    | SwitchTabCommand
+    | NavigateWorkspaceCommand
     | ManageNavigationBarCommand
     | AddGenerativeWidgetCommand
     | AssignTasksToAgentsCommand
-    | ExecuteAgentToolCommand
     | GetSkillContentCommand
-    | GetWorkspaceSnapshotCommand,
+    | GetWorkspaceSnapshotCommand
+    | ManageBackendsCommand
+    | ManageAppsCommand,
     Field(discriminator="command"),
 ]
 
@@ -388,8 +436,15 @@ class BrowserPing(Model):
     type: Literal["ping"]
 
 
+class BrowserSessionContextChangedMessage(Model):
+    """Browser-to-sidecar session context update."""
+
+    type: Literal["session_context_changed"]
+    session: BrowserSessionContext
+
+
 type BrowserMessage = Annotated[
-    BrowserCommandResultMessage | BrowserPing,
+    BrowserCommandResultMessage | BrowserPing | BrowserSessionContextChangedMessage,
     Field(discriminator="type"),
 ]
 

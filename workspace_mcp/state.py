@@ -11,6 +11,7 @@ from workspace_mcp.models import (
     BridgeErrorCode,
     BridgeError,
     BrowserSession,
+    BrowserSessionContext,
     BrowserSessionStartRequest,
     BrowserSessionStartResponse,
     CommandRequestEvent,
@@ -77,6 +78,8 @@ class BridgeSessionManager:
                 session_id=str(uuid4()),
                 token=str(uuid4()),
                 client_name=request.client_name,
+                current_dashboard_id=request.current_dashboard_id,
+                current_tab_id=request.current_tab_id,
             )
             self._browser = ConnectedBrowser(session=session)
             self._fail_pending_commands(
@@ -155,6 +158,16 @@ class BridgeSessionManager:
                     pending.future.set_result(payload.result)
                 return
 
+            if payload.type == "session_context_changed":
+                browser = self._require_session()
+                browser.session = browser.session.model_copy(
+                    update={
+                        "current_dashboard_id": payload.session.current_dashboard_id,
+                        "current_tab_id": payload.session.current_tab_id,
+                    }
+                )
+                return
+
             return
 
     async def execute_command(
@@ -197,7 +210,24 @@ class BridgeSessionManager:
                 "ok": True,
                 "browser_connected": bool(browser and browser.socket),
                 "pending_commands": len(self._pending_commands),
+                "session": (
+                    browser.session.model_dump(
+                        mode="json", exclude={"token"}, exclude_none=True
+                    )
+                    if browser
+                    else None
+                ),
             }
+
+    def get_session_context(self) -> BrowserSessionContext | None:
+        """Return the currently tracked dashboard and tab context, if any."""
+        browser = self._browser
+        if browser is None:
+            return None
+        return BrowserSessionContext(
+            current_dashboard_id=browser.session.current_dashboard_id,
+            current_tab_id=browser.session.current_tab_id,
+        )
 
     def _expire_command(self, request_id: str) -> None:
         pending = self._pending_commands.pop(request_id, None)
@@ -244,26 +274,51 @@ class BridgeSessionManager:
     async def _normalize_result(
         self, *, command_name: str, result: WorkspaceCommandResult
     ) -> WorkspaceCommandResult:
-        if command_name != "get_workspace_snapshot" or not result.ok:
-            return result
-
-        try:
-            snapshot = WorkspaceSnapshot.model_validate(result.data)
-        except ValidationError as error:
-            return self._result_error(
-                command=command_name,
-                request_id=result.request_id,
-                code="invalid_request",
-                message="Browser returned an invalid workspace snapshot payload.",
-                details={"errors": error.errors()},
+        if command_name == "get_workspace_snapshot" and result.ok:
+            try:
+                snapshot = WorkspaceSnapshot.model_validate(result.data)
+            except ValidationError as error:
+                return self._result_error(
+                    command=command_name,
+                    request_id=result.request_id,
+                    code="invalid_request",
+                    message="Browser returned an invalid workspace snapshot payload.",
+                    details={"errors": error.errors()},
+                )
+            result = result.model_copy(
+                update={
+                    "data": snapshot.model_dump(
+                        mode="json", exclude_defaults=True, exclude_none=True
+                    )
+                }
             )
 
+        return self._inject_session_context(result)
+
+    def _inject_session_context(
+        self, result: WorkspaceCommandResult
+    ) -> WorkspaceCommandResult:
+        """Annotate every successful command result with the tracked session context.
+
+        Saves callers a follow-up get_workspace_snapshot before any safe write.
+        For commands that just navigated (manage_dashboard create activate=true,
+        navigate_workspace dashboard), the explicit dashboard_id in the same
+        response is authoritative — session_context may lag by one round-trip
+        until the browser fires session_context_changed.
+        """
+        if not result.ok or not isinstance(result.data, dict):
+            return result
+        if "session_context" in result.data:
+            return result
+        ctx = self.get_session_context()
+        if ctx is None:
+            return result
+        ctx_payload = {
+            "current_dashboard_uuid": ctx.current_dashboard_id,
+            "current_tab_id": ctx.current_tab_id
+        }
         return result.model_copy(
-            update={
-                "data": snapshot.model_dump(
-                    mode="json", exclude_defaults=True, exclude_none=True
-                )
-            }
+            update={"data": {**result.data, "session_context": ctx_payload}}
         )
 
     @staticmethod
