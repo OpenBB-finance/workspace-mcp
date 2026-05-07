@@ -4,6 +4,8 @@ uri: openbb://workspace/guides/build-an-app
 use_when: You are building a new OpenBB Workspace app from scratch and need the workflow.
 language_specific: false
 related:
+  - openbb://workspace/overview/what-is-workspace
+  - openbb://workspace/overview/ai-agent-contract
   - openbb://workspace/contract/backend
   - openbb://workspace/specs/widgets-json
   - openbb://workspace/specs/apps-json
@@ -15,6 +17,10 @@ related:
 # Build an App
 
 A linear workflow for going from "I want a Workspace app for X" to a working backend that Workspace can connect to.
+
+## 0. Build the mental model first
+
+If this is your first time, read `openbb://workspace/overview/what-is-workspace` and `openbb://workspace/overview/ai-agent-contract` before drafting anything. They cover what Workspace is, what's native vs. what your backend supplies, and how the AI Agent reads widget metadata — all of which shape design choices below.
 
 ## 1. Define the user goal and data sources
 

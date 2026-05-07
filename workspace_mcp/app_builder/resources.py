@@ -48,6 +48,26 @@ _INITIAL_RESOURCES: tuple[AppBuilderResource, ...] = (
         relative_path="app-builder-index.md",
     ),
     AppBuilderResource(
+        uri="openbb://workspace/overview/what-is-workspace",
+        title="What Workspace Is",
+        description=(
+            "Mental model of OpenBB Workspace from the consumer side — "
+            "Dashboards, Apps (templates), Widgets, Prompts, the AI Agent, "
+            "and what is native vs. what your backend supplies."
+        ),
+        relative_path="overview/what-is-workspace.md",
+    ),
+    AppBuilderResource(
+        uri="openbb://workspace/overview/ai-agent-contract",
+        title="AI Agent Contract",
+        description=(
+            "How Workspace's built-in AI Agent reads widget metadata and data, "
+            "and the description / response-shape rules that make widgets "
+            "agent-friendly."
+        ),
+        relative_path="overview/ai-agent-contract.md",
+    ),
+    AppBuilderResource(
         uri="openbb://workspace/contract/backend",
         title="Backend Contract",
         description=(

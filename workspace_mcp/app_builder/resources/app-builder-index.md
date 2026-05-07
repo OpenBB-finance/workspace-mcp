@@ -4,6 +4,8 @@ uri: openbb://workspace/app-builder/index
 use_when: You are about to build, review, debug, or extend an OpenBB Workspace app and need to find the right resource to read next.
 language_specific: false
 related:
+  - openbb://workspace/overview/what-is-workspace
+  - openbb://workspace/overview/ai-agent-contract
   - openbb://workspace/contract/backend
   - openbb://workspace/specs/widgets-json
   - openbb://workspace/specs/apps-json
@@ -16,10 +18,12 @@ OpenBB Workspace apps are **language-agnostic HTTP backends plus JSON metadata c
 
 ## How to use this resource set
 
-Read the contract first, then the spec for the file you are touching, then a guide for the workflow you are in. Examples are read on demand.
+If this is your first time touching Workspace, read the two **overview** docs before anything else — they are the consumer-side mental model. Then read the contract, then the spec for the file you are touching, then a guide for the workflow you are in. Examples are read on demand.
 
 | You are about to… | Read |
 |-------------------|------|
+| **Build a mental model of what Workspace is** | `openbb://workspace/overview/what-is-workspace` |
+| **Make widgets the AI Agent can actually use** | `openbb://workspace/overview/ai-agent-contract` |
 | Understand what a backend must expose | `openbb://workspace/contract/backend` |
 | Author or edit `widgets.json` | `openbb://workspace/specs/widgets-json` + `openbb://workspace/specs/widget-types` + `openbb://workspace/specs/widget-parameters` |
 | Author or edit `apps.json` | `openbb://workspace/specs/apps-json` + `openbb://workspace/specs/layout-grid` |
