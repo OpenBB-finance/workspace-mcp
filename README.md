@@ -8,6 +8,12 @@ What it does:
 - forwards MCP tool calls to the connected Workspace tab over websocket
 - returns fresh workspace snapshots and command results from the browser
 
+Important security considerations:
+
+- use only if you treat local MCP clients as trusted; they can read and mutate the connected Workspace
+- do not expose the sidecar on `0.0.0.0`, a LAN, a tunnel, or a public reverse proxy
+- `http` is fine for local deployments (`localhost`/`127.0.0.1`)
+
 ## How to use
 
 ### 1. Install & Run
@@ -30,9 +36,9 @@ workspace-mcp --host 127.0.0.1 --port 8787
 ### 2. Connect from Workspace
 
 - open OpenBB Workspace
-- go to the AI Agents tab
+- click the hamburger icon in the top left of the Workspace UI
 - find `Workspace MCP Companion`
-- set the companion base URL to your sidecar URL, for example `http://127.0.0.1:8787` for local or `https://mcp.example.com` for a remote deployment
+- set the companion base URL to your local sidecar URL, for example `http://127.0.0.1:8787`
 - connect the companion after the sidecar is running
 
 ### 3. Connect your AI agent
@@ -79,12 +85,8 @@ Scope:
 
 - single user
 - one connected Workspace browser session
+- local-only sidecar
 - flat tool list
-
-Browser security:
-
-- `http` is fine for local deployments (`localhost`/`127.0.0.1`)
-- for any non-local deployment, use `https`; browsers will block insecure `http` sidecar requests from a secure Workspace origin
 
 ## Development
 
