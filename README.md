@@ -33,7 +33,8 @@ Run:
 workspace-mcp --host 127.0.0.1 --port 8787
 ```
 
-By default, CORS allows local loopback origins. To allow another browser origin:
+By default, CORS allows `https://pro.openbb.co` and local loopback origins.
+To allow another browser origin:
 
 ```bash
 workspace-mcp --cors-allow https://example.openbb.dev

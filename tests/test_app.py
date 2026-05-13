@@ -25,6 +25,25 @@ def test_bridge_session_start_options_preflight() -> None:
     assert "POST" in response.headers["access-control-allow-methods"]
 
 
+def test_bridge_session_start_options_preflight_allows_workspace_origin() -> None:
+    """Browser session bootstrap should accept the production Workspace origin."""
+    app = create_app()
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/bridge/session/start",
+            headers={
+                "Origin": "https://pro.openbb.co",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "https://pro.openbb.co"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
 def test_bridge_session_start_options_preflight_with_custom_cors_origin() -> None:
     """Custom configured CORS origins should be allowed."""
     app = create_app(Settings(cors_allow_origins=("https://example.openbb.dev",)))
