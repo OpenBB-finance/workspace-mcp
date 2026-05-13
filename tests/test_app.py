@@ -3,6 +3,7 @@
 from starlette.testclient import TestClient
 
 from workspace_mcp.app import create_app
+from workspace_mcp.config import Settings
 
 
 def test_bridge_session_start_options_preflight() -> None:
@@ -21,6 +22,27 @@ def test_bridge_session_start_options_preflight() -> None:
 
     assert response.status_code == 200
     assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:1420"
+    assert "POST" in response.headers["access-control-allow-methods"]
+
+
+def test_bridge_session_start_options_preflight_with_custom_cors_origin() -> None:
+    """Custom configured CORS origins should be allowed."""
+    app = create_app(Settings(cors_allow_origins=("https://example.openbb.dev",)))
+
+    with TestClient(app) as client:
+        response = client.options(
+            "/bridge/session/start",
+            headers={
+                "Origin": "https://example.openbb.dev",
+                "Access-Control-Request-Method": "POST",
+                "Access-Control-Request-Headers": "content-type",
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "https://example.openbb.dev"
+    )
     assert "POST" in response.headers["access-control-allow-methods"]
 
 
