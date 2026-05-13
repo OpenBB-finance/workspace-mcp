@@ -6,6 +6,13 @@ from dataclasses import dataclass
 ENV_PREFIX = "OPENBB_WORKSPACE_MCP_"
 
 
+def parse_csv(value: str | None) -> tuple[str, ...]:
+    """Parse a comma-separated environment value into non-empty entries."""
+    if not value:
+        return ()
+    return tuple(entry.strip() for entry in value.split(",") if entry.strip())
+
+
 @dataclass(slots=True)
 class Settings:
     """Configuration for the MCP and browser bridge HTTP surfaces."""
@@ -17,6 +24,7 @@ class Settings:
     session_start_path: str = "/bridge/session/start"
     websocket_path: str = "/bridge/ws"
     command_timeout_seconds: float = 15.0
+    cors_allow_origins: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -39,6 +47,7 @@ class Settings:
                     str(defaults.command_timeout_seconds),
                 )
             ),
+            cors_allow_origins=parse_csv(os.getenv(f"{ENV_PREFIX}CORS_ALLOW_ORIGINS")),
         )
 
     @property
