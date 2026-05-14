@@ -6,7 +6,17 @@ import os
 import uvicorn
 
 from workspace_mcp.app import create_app
-from workspace_mcp.config import ENV_PREFIX, Settings
+from workspace_mcp.config import ENV_PREFIX, Settings, parse_csv
+
+
+def parse_cors_allow_origins(values: list[str] | None) -> tuple[str, ...]:
+    """Parse repeated or comma-separated CORS origin arguments."""
+    if not values:
+        return ()
+    origins: list[str] = []
+    for value in values:
+        origins.extend(parse_csv(value))
+    return tuple(origins)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -44,6 +54,16 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-r", "--reload", action="store_true", help="Enable hot reload on code changes"
     )
+    parser.add_argument(
+        "-c",
+        "--cors-allow",
+        action="append",
+        metavar="ORIGIN",
+        help=(
+            "CORS origin to allow. Repeat the flag or use comma-separated origins. "
+            "When omitted, local loopback origins are allowed."
+        ),
+    )
     return parser
 
 
@@ -56,6 +76,7 @@ def main() -> None:
         port=args.port,
         mcp_path=args.mcp_path,
         command_timeout_seconds=args.command_timeout_seconds,
+        cors_allow_origins=parse_cors_allow_origins(args.cors_allow),
     )
     if args.reload:
         for key, value in {
@@ -66,6 +87,7 @@ def main() -> None:
             "SESSION_START_PATH": settings.session_start_path,
             "WEBSOCKET_PATH": settings.websocket_path,
             "COMMAND_TIMEOUT_SECONDS": settings.command_timeout_seconds,
+            "CORS_ALLOW_ORIGINS": ",".join(settings.cors_allow_origins),
         }.items():
             os.environ[f"{ENV_PREFIX}{key}"] = str(value)
 

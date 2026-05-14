@@ -20,6 +20,7 @@ from workspace_mcp.server import create_mcp_server
 from workspace_mcp.state import BrowserUnavailableError, BridgeSessionManager
 
 LOCALHOST_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
+DEFAULT_CORS_ALLOW_ORIGINS = ("https://pro.openbb.co",)
 
 
 def create_app(settings: Settings | None = None) -> Starlette:
@@ -36,12 +37,21 @@ def create_app(settings: Settings | None = None) -> Starlette:
         transport="streamable-http",
         stateless_http=True,
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origin_regex=LOCALHOST_ORIGIN_REGEX,
-        allow_methods=["GET", "POST", "OPTIONS"],
-        allow_headers=["*"],
-    )
+    if settings.cors_allow_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(settings.cors_allow_origins),
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["*"],
+        )
+    else:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(DEFAULT_CORS_ALLOW_ORIGINS),
+            allow_origin_regex=LOCALHOST_ORIGIN_REGEX,
+            allow_methods=["GET", "POST", "OPTIONS"],
+            allow_headers=["*"],
+        )
 
     async def health(_: Request) -> Response:
         return JSONResponse(await state.health())
