@@ -16,12 +16,34 @@ Important security considerations:
 
 ## How to use
 
-### 1. Install & Run
+### 1. Run
 
-Install:
+Run without cloning the repo:
 
 ```bash
-uv tool install --python 3.13 git+https://github.com/OpenBB-finance/workspace-mcp.git
+curl -LsSf https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.sh | sh
+```
+
+Pass CLI options after `--`:
+
+```bash
+curl -LsSf https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.sh | sh -s -- --host 127.0.0.1 --port 8787
+```
+
+The script installs `uv` if needed, then runs `workspace-mcp` from the GitHub
+source archive. To run a fork, branch, or local archive URL, set
+`WORKSPACE_MCP_SOURCE`.
+
+If `uv` is already installed, you can run the command directly:
+
+```bash
+uv tool run --python 3.13 --from https://github.com/OpenBB-finance/workspace-mcp/archive/refs/heads/main.zip workspace-mcp --host 127.0.0.1 --port 8787
+```
+
+For a persistent local install:
+
+```bash
+uv tool install --python 3.13 https://github.com/OpenBB-finance/workspace-mcp/archive/refs/heads/main.zip
 
 # If installing from a PR
 uv tool install --force --editable --python 3.13 .
