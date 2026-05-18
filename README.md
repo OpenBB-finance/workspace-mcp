@@ -18,19 +18,35 @@ Important security considerations:
 
 ### 1. Run
 
-Run without cloning the repo:
+Run without cloning the repo.
+
+macOS, Linux, WSL, and Git Bash:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.sh | sh
 ```
 
-Pass CLI options after `--`:
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "Invoke-RestMethod https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.ps1 | Invoke-Expression"
+```
+
+Pass CLI options after `--`.
+
+macOS, Linux, WSL, and Git Bash:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.sh | sh -s -- --host 127.0.0.1 --port 8787
 ```
 
-The script installs `uv` if needed, then runs `workspace-mcp` from the GitHub
+Windows PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.ps1'))) --host 127.0.0.1 --port 8787"
+```
+
+These scripts install `uv` if needed, then run `workspace-mcp` from the GitHub
 source archive. To run a fork, branch, or local archive URL, set
 `WORKSPACE_MCP_SOURCE`.
 
