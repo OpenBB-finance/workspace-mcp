@@ -1,24 +1,103 @@
 # OpenBB Workspace MCP
 
-OpenBB Workspace Companion App that exposes the connected browser session as an MCP server.
+Connect an AI agent to your active OpenBB Workspace browser session.
 
-What it does:
+This runs a local MCP sidecar at `http://127.0.0.1:8787/mcp`. OpenBB Workspace connects to the sidecar from your browser, and your AI agent connects to the MCP endpoint.
 
-- exposes a stateless streamable HTTP MCP endpoint at `/mcp`
-- forwards MCP tool calls to the connected Workspace tab over websocket
-- returns fresh workspace snapshots and command results from the browser
+## Quick Start
 
-Important security considerations:
+Requires `uv`. Install it from the [uv installation guide](https://docs.astral.sh/uv/getting-started/installation/), or use the [bootstrap command](#bootstrap-scripts) below.
 
-- use only if you treat local MCP clients as trusted; they can read and mutate the connected Workspace
-- do not expose the sidecar on `0.0.0.0`, a LAN, a tunnel, or a public reverse proxy
-- `http` is fine for local deployments (`localhost`/`127.0.0.1`)
+### 1. Install the command
 
-## How to use
+Install `workspace-mcp` from the GitHub source archive:
 
-### 1. Run
+```bash
+uv tool install --python 3.13 https://github.com/OpenBB-finance/workspace-mcp/archive/refs/heads/main.zip
+```
 
-Run without cloning the repo.
+### 2. Start the sidecar
+
+```bash
+workspace-mcp
+```
+
+The sidecar starts on `http://127.0.0.1:8787`.
+
+### 3. Connect OpenBB Workspace
+
+1. Open OpenBB Workspace.
+2. Click the hamburger icon in the top-left corner.
+3. Open `Workspace MCP Companion`.
+4. Set the companion base URL to:
+
+```text
+http://127.0.0.1:8787
+```
+
+5. Connect the companion.
+
+### 4. Connect Your Agent
+
+Use this MCP URL in your agent:
+
+```text
+http://127.0.0.1:8787/mcp
+```
+
+Example `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "workspace_mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8787/mcp"
+    }
+  }
+}
+```
+
+## Common Options
+
+Run on a different host or port:
+
+```bash
+workspace-mcp --host 127.0.0.1 --port 8787
+```
+
+Allow another browser origin:
+
+```bash
+workspace-mcp --cors-allow https://example.openbb.dev
+```
+
+Repeat `--cors-allow` or pass comma-separated origins to allow more than one.
+
+## Security
+
+Only run this locally.
+
+Connected MCP clients can read and change the active Workspace session. Do not expose the sidecar on `0.0.0.0`, a LAN, a tunnel, or a public reverse proxy.
+
+Local `http` is expected for `localhost` and `127.0.0.1`.
+
+## Capabilities
+
+The MCP server lets agents:
+
+- inspect the current Workspace state
+- read, create, update, move, and delete widgets
+- navigate Workspace pages and dashboards
+- manage dashboard layout and navigation
+- inspect available widgets and widget schemas
+- read Workspace app-building documentation
+- manage Workspace backends and apps
+- assign tasks to connected agents
+
+## Bootstrap Scripts
+
+The repo includes scripts that install `uv` if needed, then run `workspace-mcp` from the GitHub source archive.
 
 macOS, Linux, WSL, and Git Bash:
 
@@ -46,99 +125,18 @@ Windows PowerShell:
 powershell -ExecutionPolicy Bypass -Command "& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/OpenBB-finance/workspace-mcp/main/scripts/run.ps1'))) --host 127.0.0.1 --port 8787"
 ```
 
-These scripts install `uv` if needed, then run `workspace-mcp` from the GitHub
-source archive. To run a fork, branch, or local archive URL, set
-`WORKSPACE_MCP_SOURCE`.
-
-If `uv` is already installed, you can run the command directly:
-
-```bash
-uv tool run --python 3.13 --from https://github.com/OpenBB-finance/workspace-mcp/archive/refs/heads/main.zip workspace-mcp --host 127.0.0.1 --port 8787
-```
-
-For a persistent local install:
-
-```bash
-uv tool install --python 3.13 https://github.com/OpenBB-finance/workspace-mcp/archive/refs/heads/main.zip
-
-# If installing from a PR
-uv tool install --force --editable --python 3.13 .
-```
-
-Run:
-
-```bash
-workspace-mcp --host 127.0.0.1 --port 8787
-```
-
-By default, CORS allows `https://pro.openbb.co` and local loopback origins.
-To allow another browser origin:
-
-```bash
-workspace-mcp --cors-allow https://example.openbb.dev
-```
-
-Repeat `--cors-allow` or pass comma-separated origins to allow more than one.
-
-### 2. Connect from Workspace
-
-- open OpenBB Workspace
-- click the hamburger icon in the top left of the Workspace UI
-- find `Workspace MCP Companion`
-- set the companion base URL to your local sidecar URL, for example `http://127.0.0.1:8787`
-- connect the companion after the sidecar is running
-
-### 3. Connect your AI agent
-
-Use the `http://127.0.0.1:8787/mcp` as the MCP url that you pass into the `mcp add` command of your agent.
-
-Example `.mcp.json` for claude code:
-
-```json
-{
-  "mcpServers": {
-    "workspace_mcp": {
-      "type": "http",
-      "url": "http://127.0.0.1:8787/mcp"
-    }
-  }
-}
-```
-
-## Features
-
-MCP tools:
-
-- `get_workspace_snapshot`
-- `list_available_widgets`
-- `get_widget_schema`
-- `get_widget_data`
-- `get_params_options`
-- `manage_dashboard`
-- `navigate_workspace`
-- `update_widget_layout`
-- `read_widget`
-- `create_widget`
-- `update_widget`
-- `delete_widget`
-- `manage_navigation_bar`
-- `add_generative_widget`
-- `manage_backends`
-- `manage_apps`
-- `assign_tasks_to_agents`
-- `get_skill_content`
-
-Scope:
-
-- single user
-- one connected Workspace browser session
-- local-only sidecar
-- flat tool list
+To run a fork, branch, or local archive URL with these scripts, set `WORKSPACE_MCP_SOURCE`.
 
 ## Development
 
-Reload on code changes:
+From a local checkout:
 
 ```bash
-python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
+uv run python -m workspace_mcp --host 127.0.0.1 --port 8787 --reload
+```
+
+For an editable local install:
+
+```bash
+uv tool install --force --editable --python 3.13 .
 ```
