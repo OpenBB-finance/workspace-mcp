@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/specs/widget-parameters -->
+<!-- Source file: workspace_mcp/app_builder/resources/specs/widget-parameters.md -->
+
 ---
 title: Widget Parameters
 uri: openbb://workspace/specs/widget-parameters

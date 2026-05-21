@@ -7,6 +7,7 @@ What it does:
 - exposes a stateless streamable HTTP MCP endpoint at `/mcp`
 - forwards MCP tool calls to the connected Workspace tab over websocket
 - returns fresh workspace snapshots and command results from the browser
+- publishes app-builder resources for agents that build or review Workspace apps
 
 Important security considerations:
 
@@ -89,6 +90,25 @@ MCP tools:
 - `manage_apps`
 - `assign_tasks_to_agents`
 - `get_skill_content`
+
+App-builder resources:
+
+- canonical MCP entry point: `openbb://workspace/app-builder/index`
+- installable skill package: `.claude/skills/openbb-app-builder`
+- install the generated skill with:
+
+```bash
+npx skills add https://github.com/OpenBB-finance/workspace-mcp --skill openbb-app-builder
+```
+
+- regenerate the skill from MCP resources with:
+
+```bash
+uv run python workspace_mcp/app_builder/skill_generator.py
+```
+
+The generated skill is a compatibility package for agents that support
+`npx skills add`; the MCP resources are the source of truth.
 
 Scope:
 

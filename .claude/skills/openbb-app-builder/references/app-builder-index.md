@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/app-builder/index -->
+<!-- Source file: workspace_mcp/app_builder/resources/app-builder-index.md -->
+
 ---
 title: App Builder Index
 uri: openbb://workspace/app-builder/index

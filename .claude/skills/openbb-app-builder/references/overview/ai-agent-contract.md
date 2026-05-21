@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/overview/ai-agent-contract -->
+<!-- Source file: workspace_mcp/app_builder/resources/overview/ai-agent-contract.md -->
+
 ---
 title: AI Agent Contract
 uri: openbb://workspace/overview/ai-agent-contract

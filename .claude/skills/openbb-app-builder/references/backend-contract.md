@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/contract/backend -->
+<!-- Source file: workspace_mcp/app_builder/resources/backend-contract.md -->
+
 ---
 title: Backend Contract
 uri: openbb://workspace/contract/backend

@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/guides/review-app -->
+<!-- Source file: workspace_mcp/app_builder/resources/guides/review-app.md -->
+
 ---
 title: Review an App
 uri: openbb://workspace/guides/review-app

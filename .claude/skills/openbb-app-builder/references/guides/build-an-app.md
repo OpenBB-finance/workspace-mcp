@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/guides/build-an-app -->
+<!-- Source file: workspace_mcp/app_builder/resources/guides/build-an-app.md -->
+
 ---
 title: Build an App
 uri: openbb://workspace/guides/build-an-app

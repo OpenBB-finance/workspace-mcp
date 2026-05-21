@@ -1,3 +1,7 @@
+<!-- Generated from workspace_mcp/app_builder/resources by workspace_mcp/app_builder/skill_generator.py. Do not edit by hand. -->
+<!-- Source URI: openbb://workspace/validation/common-errors -->
+<!-- Source file: workspace_mcp/app_builder/resources/validation/common-errors.md -->
+
 ---
 title: Common Errors
 uri: openbb://workspace/validation/common-errors
