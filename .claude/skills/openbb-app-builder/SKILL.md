@@ -46,28 +46,3 @@ time.
 | `openbb://workspace/examples/generic-http/minimal` | `references/examples/generic-http-minimal.md` |
 | `openbb://workspace/examples/python-fastapi/minimal` | `references/examples/python-fastapi-minimal.md` |
 | `openbb://workspace/validation/common-errors` | `references/validation/common-errors.md` |
-
-## Workflow
-
-1. Read `references/app-builder-index.md`.
-2. Read the specific reference for the task: build, review, debug, convert an
-   endpoint, edit `widgets.json`, edit `apps.json`, or fix validation errors.
-3. Implement using the existing backend's framework and conventions.
-4. Validate `widgets.json`, `apps.json`, and live endpoint responses.
-5. Run a semantic output pass: default parameters, individual parameter
-   scenarios, units, table columns, chart state columns, aggregate correctness,
-   and single-period behavior.
-
-## Non-Negotiables
-
-- Do not invent fake aggregate parameter options such as `All Geographies` or
-  `2020-2024`; expose real individual selections and default to all selected
-  when that is the intended behavior.
-- Keep dropdown option payloads simple unless Workspace requires dynamic
-  lookup metadata.
-- Use business-readable widget names and descriptions.
-- Prefer `Group 1`, `Group 2`, ... for app parameter group names; put meaning
-  in descriptions and categories.
-- Populate app thumbnail fields when feasible.
-- Treat the running Workspace validator as the authority when docs and runtime
-  behavior disagree.
