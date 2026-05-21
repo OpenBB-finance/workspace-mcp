@@ -10,8 +10,8 @@ metadata:
 # OpenBB App Builder
 
 This installable skill is generated from the app-builder resource catalog in
-`https://github.com/OpenBB-finance/workspace-mcp`. The MCP resources are the source of truth; this skill is an
-offline compatibility package for agents that support `npx skills add`.
+`https://github.com/OpenBB-finance/workspace-mcp`. The MCP resources are the source of truth; this skill is only a
+lightweight launcher for agents that support `npx skills add`.
 
 ## Preferred Path
 
@@ -22,27 +22,25 @@ When Workspace MCP is available, read the live MCP resource index first:
 Then follow the resource it routes you to. The live MCP resources should win
 over this generated copy if they differ.
 
-## Offline Fallback
+## Source Fallback
 
-If MCP resources are unavailable, use the generated references bundled with
-this skill. They mirror the registered Workspace MCP resources at generation
-time.
+If MCP resources are unavailable, use the source resource files in GitHub.
 
-| MCP resource | Bundled reference |
-|--------------|-------------------|
-| `openbb://workspace/app-builder/index` | `references/app-builder-index.md` |
-| `openbb://workspace/overview/what-is-workspace` | `references/overview/what-is-workspace.md` |
-| `openbb://workspace/overview/ai-agent-contract` | `references/overview/ai-agent-contract.md` |
-| `openbb://workspace/contract/backend` | `references/backend-contract.md` |
-| `openbb://workspace/specs/widgets-json` | `references/specs/widgets-json.md` |
-| `openbb://workspace/specs/apps-json` | `references/specs/apps-json.md` |
-| `openbb://workspace/specs/widget-types` | `references/specs/widget-types.md` |
-| `openbb://workspace/specs/widget-parameters` | `references/specs/widget-parameters.md` |
-| `openbb://workspace/specs/layout-grid` | `references/specs/layout-grid.md` |
-| `openbb://workspace/guides/build-an-app` | `references/guides/build-an-app.md` |
-| `openbb://workspace/guides/review-app` | `references/guides/review-app.md` |
-| `openbb://workspace/guides/debug-app` | `references/guides/debug-app.md` |
-| `openbb://workspace/guides/convert-endpoint-to-widget` | `references/guides/convert-endpoint-to-widget.md` |
-| `openbb://workspace/examples/generic-http/minimal` | `references/examples/generic-http-minimal.md` |
-| `openbb://workspace/examples/python-fastapi/minimal` | `references/examples/python-fastapi-minimal.md` |
-| `openbb://workspace/validation/common-errors` | `references/validation/common-errors.md` |
+| MCP resource | Source file |
+|--------------|-------------|
+| `openbb://workspace/app-builder/index` | [app-builder-index.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/app-builder-index.md) |
+| `openbb://workspace/overview/what-is-workspace` | [overview/what-is-workspace.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/overview/what-is-workspace.md) |
+| `openbb://workspace/overview/ai-agent-contract` | [overview/ai-agent-contract.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/overview/ai-agent-contract.md) |
+| `openbb://workspace/contract/backend` | [backend-contract.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/backend-contract.md) |
+| `openbb://workspace/specs/widgets-json` | [specs/widgets-json.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/specs/widgets-json.md) |
+| `openbb://workspace/specs/apps-json` | [specs/apps-json.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/specs/apps-json.md) |
+| `openbb://workspace/specs/widget-types` | [specs/widget-types.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/specs/widget-types.md) |
+| `openbb://workspace/specs/widget-parameters` | [specs/widget-parameters.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/specs/widget-parameters.md) |
+| `openbb://workspace/specs/layout-grid` | [specs/layout-grid.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/specs/layout-grid.md) |
+| `openbb://workspace/guides/build-an-app` | [guides/build-an-app.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/guides/build-an-app.md) |
+| `openbb://workspace/guides/review-app` | [guides/review-app.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/guides/review-app.md) |
+| `openbb://workspace/guides/debug-app` | [guides/debug-app.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/guides/debug-app.md) |
+| `openbb://workspace/guides/convert-endpoint-to-widget` | [guides/convert-endpoint-to-widget.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/guides/convert-endpoint-to-widget.md) |
+| `openbb://workspace/examples/generic-http/minimal` | [examples/generic-http-minimal.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/examples/generic-http-minimal.md) |
+| `openbb://workspace/examples/python-fastapi/minimal` | [examples/python-fastapi-minimal.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/examples/python-fastapi-minimal.md) |
+| `openbb://workspace/validation/common-errors` | [validation/common-errors.md](https://github.com/OpenBB-finance/workspace-mcp/blob/main/workspace_mcp/app_builder/resources/validation/common-errors.md) |

@@ -11,7 +11,6 @@ from pathlib import Path
 
 REPO_URL = "https://github.com/OpenBB-finance/workspace-mcp"
 RESOURCE_REGISTRY = Path("workspace_mcp/app_builder/resources.py")
-RESOURCE_DIR = Path("workspace_mcp/app_builder/resources")
 SKILL_DIR = Path(".claude/skills/openbb-app-builder")
 GENERATED_MARKER = (
     "<!-- Generated from workspace_mcp/app_builder/resources by "
@@ -28,35 +27,13 @@ class CatalogResource:
     description: str
     relative_path: str
 
-    @property
-    def reference_path(self) -> Path:
-        """Return this resource's generated skill reference path."""
-        return Path("references") / self.relative_path
-
 
 def expected_skill_files(repo_root: Path) -> dict[Path, str]:
     """Return the generated skill files keyed by repository-relative path."""
     resources = parse_resource_registry(repo_root / RESOURCE_REGISTRY)
-    files: dict[Path, str] = {
+    return {
         SKILL_DIR / "SKILL.md": skill_body(resources),
     }
-
-    for resource in resources:
-        source_path = repo_root / RESOURCE_DIR / resource.relative_path
-        source_body = source_path.read_text(encoding="utf-8").strip()
-        reference_body = "\n".join(
-            [
-                GENERATED_MARKER,
-                f"<!-- Source URI: {resource.uri} -->",
-                f"<!-- Source file: {RESOURCE_DIR / resource.relative_path} -->",
-                "",
-                source_body,
-                "",
-            ]
-        )
-        files[SKILL_DIR / resource.reference_path] = reference_body
-
-    return files
 
 
 def write_skill(repo_root: Path) -> None:
@@ -165,8 +142,8 @@ def parse_resource_call(node: ast.AST) -> CatalogResource:
 
 def skill_body(resources: tuple[CatalogResource, ...]) -> str:
     """Build SKILL.md content for the generated installable skill."""
-    reference_rows = "\n".join(
-        f"| `{resource.uri}` | `{resource.reference_path.as_posix()}` |"
+    resource_rows = "\n".join(
+        f"| `{resource.uri}` | [{resource.relative_path}]({resource_url(resource)}) |"
         for resource in resources
     )
 
@@ -182,8 +159,8 @@ metadata:
 # OpenBB App Builder
 
 This installable skill is generated from the app-builder resource catalog in
-`{REPO_URL}`. The MCP resources are the source of truth; this skill is an
-offline compatibility package for agents that support `npx skills add`.
+`{REPO_URL}`. The MCP resources are the source of truth; this skill is only a
+lightweight launcher for agents that support `npx skills add`.
 
 ## Preferred Path
 
@@ -194,16 +171,22 @@ When Workspace MCP is available, read the live MCP resource index first:
 Then follow the resource it routes you to. The live MCP resources should win
 over this generated copy if they differ.
 
-## Offline Fallback
+## Source Fallback
 
-If MCP resources are unavailable, use the generated references bundled with
-this skill. They mirror the registered Workspace MCP resources at generation
-time.
+If MCP resources are unavailable, use the source resource files in GitHub.
 
-| MCP resource | Bundled reference |
-|--------------|-------------------|
-{reference_rows}
+| MCP resource | Source file |
+|--------------|-------------|
+{resource_rows}
 """
+
+
+def resource_url(resource: CatalogResource) -> str:
+    """Return the GitHub URL for one registered markdown resource."""
+    return (
+        f"{REPO_URL}/blob/main/workspace_mcp/app_builder/resources/"
+        f"{resource.relative_path}"
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
