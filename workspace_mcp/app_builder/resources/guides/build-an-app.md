@@ -49,10 +49,13 @@ Read `openbb://workspace/contract/backend`. Confirm you understand:
 For each widget:
 
 1. Pick a stable widget id (becomes the dict key and the layout's `i`).
-2. Pick the right `type`. See `openbb://workspace/specs/widget-types`. Don't default to `table` for articles or markdown for tables.
-3. Define the params. See `openbb://workspace/specs/widget-parameters`. Use `boolean`, `number`, `date`, `endpoint` types — not `text` dropdowns of "true"/"false".
-4. For tables, sketch the columns under `data.table.columnsDefs`.
-5. Decide which columns should be clickable for cross-widget navigation (`renderFn: "cellOnClick"`).
+2. Pick a business-readable `name` and description. The name should describe the metric/question, not the implementation (`Executive ESG KPI Snapshot`, not `KPI Cards`).
+3. Pick the right `type`. See `openbb://workspace/specs/widget-types`. Don't default to `table` for articles or markdown for tables.
+4. Define the params. See `openbb://workspace/specs/widget-parameters`. Use `boolean`, `number`, `date`, `endpoint` types — not `text` dropdowns of "true"/"false".
+   - Prefer individual multi-select choices over fake aggregate options such as `All Geographies` or `2020-2024`; default all values selected when the intended starting scope is "all".
+   - Keep option objects simple: usually `{label, value}`. Add `category` only when it has a concrete Workspace role.
+5. For tables, sketch the columns under `data.table.columnsDefs`.
+6. Decide which columns should be clickable for cross-widget navigation (`renderFn: "cellOnClick"`).
 
 See `openbb://workspace/specs/widgets-json` for the field shape.
 
@@ -62,8 +65,9 @@ Skip if you're shipping a backend without canned dashboards. Otherwise:
 
 1. Plan the tabs. Most apps fit one tab. 3–5 is a healthy ceiling.
 2. Lay widgets out on the 40-column grid. Sketch on paper or in ASCII first. See `openbb://workspace/specs/layout-grid`.
-3. Define parameter groups for synchronized widgets. Group names follow the `Group 1`, `Group 2`, ... pattern verbatim.
+3. Define parameter groups for synchronized widgets. Prefer `Group 1`, `Group 2`, ... names for strict compatibility; put human-readable meaning in descriptions/categories.
 4. Add `"groups": []` and `"prompts": []` even when empty — several validators expect those keys to exist.
+5. Populate `img`, `img_dark`, and `img_light` when feasible. Prefer a small served SVG/PNG via `/thumbnails/{name}` or a stable hosted image URL over empty strings.
 
 See `openbb://workspace/specs/apps-json`.
 
@@ -79,16 +83,27 @@ For each widget, implement the data endpoint to return the shape the widget type
 
 Keep things deterministic when you can — Workspace's failure messages are clearer when the endpoint is well-typed.
 
-## 7. Validate the JSON
+## 7. Validate the JSON and semantic output
 
 Before going to the browser:
 
 - `widgets.json` is an object (`{...}`), not an array.
 - `apps.json` is an array (`[...]`), not an object.
 - Layout `i` matches a key in `widgets.json`.
-- Group `name` is `Group 1`, `Group 2`, ... literally.
+- Group `name` uses `Group 1`, `Group 2`, ... unless you have browser-tested descriptive names.
 - Table columns live at `data.table.columnsDefs`.
 - `formatterFn` uses one of `int|none|percent|normalized|normalizedPercent|dateToYear`.
+
+Then run a semantic output pass. Schema-valid is not enough:
+
+- Inspect the source data first: row counts, years, geographies/entities, and any explicit aggregate rows.
+- Hit every widget endpoint with default params and confirm non-empty, type-correct data.
+- Test at least three parameter scenarios when params exist: default, one period/category, and a meaningful subset.
+- For table widgets, confirm every declared `columnsDefs[].field` exists in the endpoint output.
+- For `apps.json` chart state, confirm every `chartModel.cellRange.columns` entry exists in the widget output.
+- If the source provides explicit consolidated rows, use those for full consolidated defaults rather than recomputing from granular rows.
+- For single-period selections, return snapshots or `delta: n/a`; do not emit fake comparisons such as `2024 vs 2024`.
+- Confirm units and formatting match the metric meaning, especially intensity fields like `*_per_revenue`, `*_per_employee`, or `*_per_MEUR`.
 
 See `openbb://workspace/validation/common-errors` for the full list.
 

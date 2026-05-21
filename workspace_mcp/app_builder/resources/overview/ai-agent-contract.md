@@ -68,4 +68,4 @@ Empty `"prompts": []` is valid; ship at least 3–5 if you want the App to feel 
 ## Out of scope here
 
 - **Building your own AI Agent backend.** That's a separate backend surface (`/agents.json` + `/query` SSE) — see `https://docs.openbb.co/workspace/developers/agents-integration`. The Agent described here is the one Workspace ships and runs against your widgets.
-- **Agent skills / `npx skills add`.** A way to install agent capabilities client-side; not part of authoring widgets.
+- **External agent-skill packaging.** The generated `openbb-app-builder` skill is only a compatibility package for clients that cannot read MCP resources directly; the canonical app-builder content remains this resource catalog.

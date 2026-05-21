@@ -3,7 +3,10 @@
 *.log.*
 _dev/
 *.pyc
-.claude
+.claude/*
+!.claude/skills/
+!.claude/skills/openbb-app-builder/
+!.claude/skills/openbb-app-builder/**
 .gemini
 .codex
 .agents

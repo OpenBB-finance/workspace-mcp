@@ -33,6 +33,7 @@ The mistakes that catch real apps. When validation fails, walk this list before 
 | `Unknown App: [name]: Required` | apps.json is an object, not array | Wrap in `[ ... ]` |
 | `[tabs]: Required` | Missing or wrong tab structure | Each tab needs `id`, `name`, `layout` |
 | `allowCustomization: Required` | Field missing | Add `"allowCustomization": true` |
+| App has no thumbnail | `img`, `img_dark`, and `img_light` are empty | Prefer a stable hosted image URL or serve a small SVG/PNG from `/thumbnails/{name}` |
 | `groups: Recommended` | `groups` field absent | Add `"groups": []` as the safe default |
 | `prompts: Required` | `prompts` field absent | Add `"prompts": []` as the safe default |
 | `Widget 'xxx' not found` | Layout `i` doesn't match any widget id | Fix typo or align with `widgets.json` keys |
@@ -52,7 +53,7 @@ The mistakes that catch real apps. When validation fails, walk this list before 
 
 | Symptom | Cause | Fix |
 |---------|-------|-----|
-| Group exists, no widget joins | Group `name` is not `Group 1`/`Group 2`/... | Rename — runtime ignores custom names |
+| Group exists, no widget joins | Group `name` may not be compatible with runtime group matching | Prefer `Group 1`/`Group 2`/... and put human-readable meaning in `description`/`category`; browser-test custom names before shipping |
 | Group exists but sync silently disabled | Group `type` doesn't match the underlying param shape | `param` for static `text+options`, `endpointParam` for `endpoint+optionsEndpoint`, `ticker` for OpenBB's universal ticker registry |
 | Sync works for some widgets, not others | A widget is missing from the group's `widgetIds`, or its layout entry is missing `"groups": [...]`, or its widget config uses a different `paramName`/`optionsEndpoint` | Make all three places agree |
 | Discovery widget doesn't drive the dashboard | Discovery widget isn't in the symbol group | Add it to `widgetIds` and add `"groups": ["Group 1"]` to its layout entry |

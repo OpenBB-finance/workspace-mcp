@@ -25,7 +25,7 @@ Every param object should have:
 | `description` | Yes (in practice) | Tooltip help shown on hover. Don't omit. |
 | `value` | Usually | Default value. |
 | `show` | Optional | When `false`, the param is hidden in the UI but still sent — used for cellOnClick patterns. |
-| `multiple` | Optional | For `endpoint` dropdowns that allow multi-select. |
+| `multiSelect` | Optional | For dropdowns that allow selecting multiple values. Use a comma-separated default string unless the app's existing convention uses an array. |
 | `optionsEndpoint` | When `type: "endpoint"` | Backend path that returns the options list. |
 | `optionsParams` | Optional | Dependent options — e.g. `{ "country": "$country" }` re-fetches when the named param changes. |
 | `options` | When `type: "text"` with a curated list | Inline `[{label, value}]` array. |
@@ -93,10 +93,31 @@ Date modifiers: `$currentDate`, `$currentDate-1d`, `$currentDate-1w`, `$currentD
 ```json
 { "paramName": "symbol", "type": "endpoint", "label": "Select Symbol",
   "description": "Choose a ticker",
-  "optionsEndpoint": "/symbols", "multiple": false }
+  "optionsEndpoint": "/symbols" }
 ```
 
 The `optionsEndpoint` should return an array of `{ label, value }` objects.
+
+Keep dropdown options simple. Use `{label, value}` for normal dropdowns; add `category` only when Workspace needs that category for grouping/search semantics. Avoid `extraInfo` unless the user explicitly wants an advanced/search-rich dropdown.
+
+### Multi-select dimensions
+
+For filters like years, geographies, countries, sectors, or business units:
+
+```json
+{ "paramName": "years", "type": "endpoint", "label": "Years",
+  "description": "Reporting years to include",
+  "optionsEndpoint": "/year_options",
+  "multiSelect": true,
+  "value": "2020,2021,2022,2023,2024" }
+```
+
+Prefer real individual choices over fake aggregate choices:
+
+- Good: options `2020`, `2021`, `2022`, `2023`, `2024` with all selected by default.
+- Avoid: a selectable `2020-2024` option unless it is a real domain value users should choose.
+- Good: options `Portugal`, `Angola`, `Brazil`.
+- Avoid: a selectable `All Geographies` option unless it is a real source row users should choose directly.
 
 ### Dependent dropdown — `optionsParams`
 

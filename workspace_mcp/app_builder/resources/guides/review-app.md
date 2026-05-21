@@ -31,9 +31,12 @@ If any of these are wrong, fix before reviewing further.
 - `type` is a real Workspace type (`table`, `chart`, `metric`, `markdown`, `newsfeed`, `live_grid`, etc.). No invented aliases.
 - Every param has `paramName`, `type`, `label`, `description`, and a sensible `value`.
 - Param types match shape: `boolean` for toggles, `number` for free-form integers, `date` for dates, `endpoint` for dropdowns from a backend.
+- Dropdown option objects are simple unless an advanced picker is intentional: usually `{label, value}`. Do not add `extraInfo` by default.
+- Multi-select dimensions expose real individual choices. Avoid fake options like `All Geographies` or `2020-2024` unless the backend intentionally treats them as real domain values.
 - Table columns are at `data.table.columnsDefs` — not at `columns` and not at `data.columnsDefs`.
 - `formatterFn` uses one of `int|none|percent|normalized|normalizedPercent|dateToYear`. (`"currency"` is invalid — use `"none"`.)
 - `runButton` is `false` (or absent) unless the work is genuinely heavy (>5 s).
+- Widget names and descriptions explain the business content. Names like `KPI Cards` and descriptions like `AG Grid combo chart` are too implementation-focused unless that is the user's explicit language.
 
 See `openbb://workspace/specs/widgets-json` and `openbb://workspace/specs/widget-parameters`.
 
@@ -41,6 +44,7 @@ See `openbb://workspace/specs/widgets-json` and `openbb://workspace/specs/widget
 
 - Top level is an array of app objects.
 - Each app has `name`, `tabs`, `allowCustomization`. `groups` and `prompts` are present even when `[]`.
+- `img`, `img_dark`, and `img_light` are populated when a reasonable thumbnail exists; if blank, note it as a polish gap.
 - Each tab has `id`, `name`, `layout`.
 - Each layout item uses `i` (not `id`), plus `x`, `y`, `w`, `h`.
 - Every layout item's `i` matches a key in `widgets.json`.
@@ -56,6 +60,19 @@ See `openbb://workspace/specs/apps-json`.
 - Tab heights make sense per type (metrics 4–6, tables 8–15, charts 12–15).
 - Each widget's data endpoint is reachable and returns the shape its `type` expects (table → array of rows, chart → Plotly JSON, etc.).
 - Endpoints honor the params their `widgets.json` declares.
+- Every table endpoint row contains every declared `data.table.columnsDefs[].field`.
+- Every `apps.json` chart state column (`chartModel.cellRange.columns`) exists in the referenced widget's output.
+
+## 4.5 Semantic data correctness
+
+After contract shape passes, review whether the numbers and parameter behavior make sense:
+
+- Inspect source data dimensions: row counts, categories, time periods, entities, and explicit aggregate rows.
+- Compare default aggregate outputs to official aggregate/source rows when they exist. Do not silently recompute consolidated totals from granular rows if the source already provides consolidated rows.
+- Test at least three parameter scenarios: default, one period/category, and a meaningful subset.
+- Single-period selections should show snapshots or `delta: n/a`, not fake deltas such as `2024 vs 2024`.
+- Units and formatting should match the metric meaning, especially intensity fields like `*_per_revenue`, `*_per_employee`, or `*_per_MEUR`.
+- Source-table widgets named `Master Database`, `Raw Data`, or similar should serve the full source table as-is unless the user asked for filters.
 
 ## 5. Click-through and discovery
 

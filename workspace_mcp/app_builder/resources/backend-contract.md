@@ -67,6 +67,7 @@ Header-based auth is preferred — keys stay out of URLs and access logs. Worksp
 ## Optional endpoints and behaviors
 
 - `GET /` — A friendly root response. Helpful for sanity checks but not required.
+- `GET /thumbnails/{name}` — A simple way to serve app gallery SVG/PNG thumbnails referenced by `apps.json` `img`, `img_dark`, and `img_light`.
 - A `theme` query parameter — Widget endpoints often accept `theme=dark|light` so the response (e.g. a Plotly figure) matches the user's UI theme.
 - A `raw` query parameter — Chart endpoints often accept `raw=true` to return the underlying rows instead of the rendered figure, so AI agents and table conversions can work with the data.
 
