@@ -171,6 +171,15 @@ When Workspace MCP is available, read the live MCP resource index first:
 Then follow the resource it routes you to. The live MCP resources should win
 over this generated copy if they differ.
 
+## Example Backends
+
+For concrete backend implementations, templates, and widget examples, use:
+
+`https://github.com/OpenBB-finance/backends-for-openbb`
+
+Treat that repository as implementation context and examples. The canonical
+app-builder instructions still live in the Workspace MCP resource catalog.
+
 ## Source Fallback
 
 If MCP resources are unavailable, use the source resource files in GitHub.
