@@ -88,6 +88,131 @@ async def test_workspace_tool_usage_prompt_is_registered() -> None:
     assert "pass origin as the exact catalog value returned by list_available_widgets" in SERVER_INSTRUCTIONS
     assert "use that UUID for layout changes" in SERVER_INSTRUCTIONS
     assert "Never use a widget title or generic widget type" in SERVER_INSTRUCTIONS
+    assert "search_workspace_docs or read_workspace_doc" in SERVER_INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_app_builder_resources_are_listed_and_readable() -> None:
+    """The server should expose the app-builder docs as MCP resources."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    resources = await server.list_resources()
+    by_uri = {str(resource.uri): resource for resource in resources}
+
+    assert "openbb://workspace/app-builder/index" in by_uri
+    assert "openbb://workspace/specs/widgets-json" in by_uri
+    assert by_uri["openbb://workspace/specs/widgets-json"].name == "widgets.json Spec"
+
+    result = await server.read_resource("openbb://workspace/specs/widgets-json")
+
+    assert "widgets.json" in str(result)
+    assert "openbb://workspace/specs/widget-types" in str(result)
+
+
+@pytest.mark.asyncio
+async def test_workspace_docs_tools_are_registered() -> None:
+    """The docs search/read helpers should be model-visible tools."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    tools = await server.list_tools()
+    by_name = {tool.name: tool for tool in tools}
+
+    assert "search_workspace_docs" in by_name
+    assert "read_workspace_doc" in by_name
+    assert "building, reviewing, debugging" in by_name[
+        "search_workspace_docs"
+    ].description
+    assert "exact openbb://workspace/... URI" in by_name[
+        "read_workspace_doc"
+    ].description
+
+
+@pytest.mark.asyncio
+async def test_search_workspace_docs_returns_relevant_resources() -> None:
+    """Docs search should route common app-builder queries to resource URIs."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    result = await server.call_tool(
+        "search_workspace_docs",
+        {"query": "widgets.json params widget types", "limit": 3},
+    )
+
+    content = result.structured_content
+    assert content["ok"] is True
+    uris = [item["uri"] for item in content["data"]["results"]]
+    assert "openbb://workspace/specs/widgets-json" in uris
+    assert any(
+        uri
+        in {
+            "openbb://workspace/specs/widget-types",
+            "openbb://workspace/specs/widget-parameters",
+        }
+        for uri in uris
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_workspace_doc_returns_metadata_and_content() -> None:
+    """Docs read should return one exact resource with parsed metadata."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    result = await server.call_tool(
+        "read_workspace_doc",
+        {"uri": "openbb://workspace/guides/build-an-app"},
+    )
+
+    content = result.structured_content
+    resource = content["data"]["resource"]
+    assert content["ok"] is True
+    assert resource["title"] == "Build an App"
+    assert resource["metadata"]["title"] == "Build an App"
+    assert "openbb://workspace/specs/widgets-json" in resource["related"]
+    assert "# Build an App" in resource["body"]
+    assert "---" in resource["content"]
+
+
+@pytest.mark.asyncio
+async def test_read_workspace_doc_rejects_unknown_uri() -> None:
+    """Unknown resource URIs should fail without touching the browser bridge."""
+    server = create_mcp_server(
+        BridgeSessionManager(
+            base_url="http://127.0.0.1:8787",
+            websocket_path="/bridge/ws",
+            command_timeout_seconds=1,
+        )
+    )
+
+    result = await server.call_tool(
+        "read_workspace_doc",
+        {"uri": "openbb://workspace/nope"},
+    )
+
+    assert result.structured_content["ok"] is False
+    assert result.structured_content["error"]["code"] == "invalid_request"
 
 
 @pytest.mark.asyncio
@@ -1022,6 +1147,34 @@ async def test_update_widget_rejects_layout_ui_args_with_routing_hint() -> None:
     assert state.commands == []
     assert result.structured_content["ok"] is False
     assert "update_widget_layout" in result.structured_content["message"]
+
+
+@pytest.mark.asyncio
+async def test_update_widget_description_explains_note_html_edit() -> None:
+    """update_widget should tell agents to edit a note body via ui_args html."""
+    _state, server = _build_recording_server()
+
+    tools = await server.list_tools()
+    description = {tool.name: tool for tool in tools}["update_widget"].description
+
+    assert 'ui_args under the key html' in description
+    assert "Do not delete and recreate the note" in description
+    assert 'ui_args under the key html' in SERVER_INSTRUCTIONS
+
+
+@pytest.mark.asyncio
+async def test_update_widget_carries_note_html_ui_args() -> None:
+    """A note-body edit via ui_args html must reach the bridge config unchanged."""
+    state, server = _build_recording_server()
+
+    await server.call_tool(
+        "update_widget",
+        {"widget_uuid": "w-1", "ui_args": {"html": "<p>SUP HEAVY</p>"}},
+    )
+
+    cmd = state.commands[0]
+    assert isinstance(cmd, UpdateWidgetCommand)
+    assert cmd.config.ui_args == {"html": "<p>SUP HEAVY</p>"}
 
 
 # ---------- update_widget_layout ----------

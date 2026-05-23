@@ -26,6 +26,7 @@ def register(server: FastMCP, run: CommandRunner) -> None:
             "For add, requires name and url. Optional endpoint_headers is an array of "
             '{"key", "value", "location"} objects where location is "headers" (default) or "query". '
             "validate_widgets defaults to true and surfaces a warning if widgets fail to load.",
+            "When adding, updating, or debugging a custom backend, search Workspace docs for backend contract and validation guidance first; relevant docs often include openbb://workspace/contract/backend and openbb://workspace/validation/common-errors.",
             "For update, requires backend_id and at least one of name, url, or endpoint_headers.",
             "For refresh, requires backend_id; re-fetches widgets and templates from the backend URL.",
             "For remove, requires backend_id.",

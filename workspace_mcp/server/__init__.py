@@ -30,6 +30,7 @@ from workspace_mcp.server.tools import (
     agents as agents_tools,
     backends as backends_tools,
     dashboards as dashboards_tools,
+    docs as docs_tools,
     generative as generative_tools,
     navigation as navigation_tools,
     snapshot as snapshot_tools,
@@ -64,6 +65,7 @@ def create_mcp_server(state: BridgeSessionManager) -> FastMCP:
     )
 
     register_app_builder_resources(server)
+    docs_tools.register(server)
 
     @server.prompt(
         name="workspace_tool_usage",
