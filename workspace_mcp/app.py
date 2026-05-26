@@ -20,7 +20,7 @@ from workspace_mcp.server import create_mcp_server
 from workspace_mcp.state import BrowserUnavailableError, BridgeSessionManager
 
 LOCALHOST_ORIGIN_REGEX = r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$"
-DEFAULT_CORS_ALLOW_ORIGINS = ("https://pro.openbb.co",)
+DEFAULT_CORS_ALLOW_ORIGINS = ("https://pro.openbb.co", "https://pro.openbb.dev")
 
 
 def create_app(settings: Settings | None = None) -> Starlette:

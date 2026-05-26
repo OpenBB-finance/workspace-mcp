@@ -1,5 +1,6 @@
 """ASGI app tests for browser bridge HTTP behavior."""
 
+import pytest
 from starlette.testclient import TestClient
 
 from workspace_mcp.app import create_app
@@ -25,22 +26,28 @@ def test_bridge_session_start_options_preflight() -> None:
     assert "POST" in response.headers["access-control-allow-methods"]
 
 
-def test_bridge_session_start_options_preflight_allows_workspace_origin() -> None:
-    """Browser session bootstrap should accept the production Workspace origin."""
+@pytest.mark.parametrize(
+    "origin",
+    ("https://pro.openbb.co", "https://pro.openbb.dev"),
+)
+def test_bridge_session_start_options_preflight_allows_workspace_origin(
+    origin: str,
+) -> None:
+    """Browser session bootstrap should accept default Workspace origins."""
     app = create_app()
 
     with TestClient(app) as client:
         response = client.options(
             "/bridge/session/start",
             headers={
-                "Origin": "https://pro.openbb.co",
+                "Origin": origin,
                 "Access-Control-Request-Method": "POST",
                 "Access-Control-Request-Headers": "content-type",
             },
         )
 
     assert response.status_code == 200
-    assert response.headers["access-control-allow-origin"] == "https://pro.openbb.co"
+    assert response.headers["access-control-allow-origin"] == origin
     assert "POST" in response.headers["access-control-allow-methods"]
 
 
