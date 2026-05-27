@@ -470,7 +470,13 @@ class ErrorEvent(Model):
     error: BridgeError
 
 
-type ServerEvent = SessionReadyEvent | CommandRequestEvent | ErrorEvent
+class PongEvent(Model):
+    """Server-to-browser keepalive acknowledgement."""
+
+    type: Literal["pong"]
+
+
+type ServerEvent = SessionReadyEvent | CommandRequestEvent | ErrorEvent | PongEvent
 
 workspace_command_adapter = TypeAdapter(WorkspaceCommand)
 browser_message_adapter = TypeAdapter(BrowserMessage)

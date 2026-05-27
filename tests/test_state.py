@@ -409,6 +409,18 @@ async def test_session_context_is_not_injected_into_error_results(
     assert result.data is None
 
 
+@pytest.mark.asyncio
+async def test_ping_is_answered_with_pong(
+    bridge_manager: BridgeSessionManager,
+) -> None:
+    """Keepalive pings should receive a pong so the browser can detect a dead socket."""
+    socket = await connect_browser(bridge_manager)
+
+    await bridge_manager.handle_browser_message({"type": "ping"})
+
+    assert socket.messages[-1] == {"type": "pong"}
+
+
 async def connect_browser(bridge_manager: BridgeSessionManager) -> FakeSocket:
     """Start a bridge session and attach a fake browser socket."""
     session = await bridge_manager.start_session(BrowserSessionStartRequest())
