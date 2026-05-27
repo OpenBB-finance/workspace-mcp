@@ -15,6 +15,7 @@ from workspace_mcp.models import (
     BrowserSessionStartRequest,
     BrowserSessionStartResponse,
     CommandRequestEvent,
+    PongEvent,
     WorkspaceCommand,
     WorkspaceCommandResult,
     WorkspaceSnapshot,
@@ -156,6 +157,14 @@ class BridgeSessionManager:
                     pending = self._pending_commands.pop(request_id)
                     pending.timeout_handle.cancel()
                     pending.future.set_result(payload.result)
+                return
+
+            if payload.type == "ping":
+                browser = self._require_session()
+                if browser.socket is not None:
+                    await browser.socket.send_json(
+                        PongEvent(type="pong").model_dump(mode="json")
+                    )
                 return
 
             if payload.type == "session_context_changed":
