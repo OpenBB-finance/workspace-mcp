@@ -64,6 +64,15 @@ def build_parser() -> argparse.ArgumentParser:
             "When omitted, local loopback origins are allowed."
         ),
     )
+    parser.add_argument(
+        "--public-base-url",
+        dest="public_base_url",
+        default=None,
+        help=(
+            "Public HTTP base URL clients should use for bridge websocket URLs. "
+            "Useful when the sidecar is behind a local dev proxy."
+        ),
+    )
     return parser
 
 
@@ -77,6 +86,7 @@ def main() -> None:
         mcp_path=args.mcp_path,
         command_timeout_seconds=args.command_timeout_seconds,
         cors_allow_origins=parse_cors_allow_origins(args.cors_allow),
+        public_base_url=args.public_base_url,
     )
     if args.reload:
         for key, value in {

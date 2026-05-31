@@ -92,7 +92,7 @@ class WorkspaceSnapshot(Model):
 
     generated_at: int
     workspace_state: WorkspaceState | None = None
-    workspace_options: list[str] = Field(default_factory=list)
+    workspace_options: dict[str, Any] | list[str] = Field(default_factory=dict)
     dashboards: list[dict[str, Any]] = Field(default_factory=list)
     dashboard_composition: dict[str, Any] | None = None
     widgets: dict[str, list[dict[str, Any]]] = Field(default_factory=widget_groups)

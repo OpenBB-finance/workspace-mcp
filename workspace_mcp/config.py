@@ -25,6 +25,7 @@ class Settings:
     websocket_path: str = "/bridge/ws"
     command_timeout_seconds: float = 15.0
     cors_allow_origins: tuple[str, ...] = ()
+    public_base_url: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -53,4 +54,6 @@ class Settings:
     @property
     def base_url(self) -> str:
         """Return the HTTP base URL for the current settings."""
+        if self.public_base_url:
+            return self.public_base_url.rstrip("/")
         return f"http://{self.host}:{self.port}"
