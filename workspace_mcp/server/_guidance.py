@@ -59,6 +59,15 @@ WIDGET_INSTANCE_GUIDANCE = (
     "Never use a widget title or generic widget type such as rich_note as a layout "
     "identifier."
 )
+NOTE_UPDATE_GUIDANCE = (
+    "To change the text of an existing rich_note (note) widget, call update_widget "
+    "with the new body in ui_args under the key html, for example "
+    'ui_args={"html": "<p>New note text</p>"}. A note body is stored as HTML, so '
+    "pass HTML, not markdown or plain text. This edits the note in place and keeps "
+    "its widget_uuid and layout. Do not delete and recreate the note to change its "
+    "text, and do not put note text in data_args or under a data key — those are "
+    "silently ignored and the note will not change."
+)
 DASHBOARD_TARGETING_GUIDANCE = (
     "Resolve dashboard_id from current_dashboard_uuid before each write. Every "
     "successful command result includes session_context.current_dashboard_uuid "
@@ -96,6 +105,13 @@ NAVIGATION_BAR_GUIDANCE = (
     'for example [{"name":"AAPL Analysis"}]. Each object must use only the key name, not tab_id or tab_name. '
     'Do not pass a string array such as ["AAPL Analysis"].'
 )
+APP_BUILDER_DOCS_GUIDANCE = (
+    "For custom Workspace backend/app authoring, review, debugging, or "
+    "endpoint-to-widget conversion, use search_workspace_docs or read_workspace_doc "
+    "before acting. Do not use documentation tools for ordinary live-dashboard "
+    "operations unless the user asks for app-builder, backend contract, "
+    "widgets.json, or apps.json guidance."
+)
 DISCOVERY_WORKFLOW = (
     "Recommended workflow: call get_workspace_snapshot first, manage_dashboard "
     "with operation='create' when you need a fresh dashboard, call "
@@ -126,9 +142,11 @@ SERVER_INSTRUCTIONS = " ".join(
         PARAM_OPTIONS_SHAPE,
         GENERATIVE_WIDGET_GUIDANCE,
         WIDGET_INSTANCE_GUIDANCE,
+        NOTE_UPDATE_GUIDANCE,
         DASHBOARD_TARGETING_GUIDANCE,
         CREATE_DASHBOARD_GUIDANCE,
         LAYOUT_GUIDANCE,
+        APP_BUILDER_DOCS_GUIDANCE,
         DISCOVERY_WORKFLOW,
         (
             "Provide dashboard_id explicitly when operating on a dashboard other than "

@@ -21,7 +21,7 @@ The sidecar listens on `http://127.0.0.1:8787/mcp` (streamable HTTP). Health che
 
 Workspace runs at `https://pro.openbb.co` (production), `https://pro.openbb.dev` (staging), or `http://localhost:1420` (local dev). The MCP Companion is a side panel inside Workspace that bridges the running browser session to the sidecar.
 
-The Companion entry is gated by the `VITE_UI_SHOW_COMPANION_MODE` flag (see `terminalpro/.env`). Make sure it's `"true"` for the build you're testing against, then open it from the hamburger menu and connect to `http://127.0.0.1:8787`.
+The Companion entry is gated by the `VITE_UI_SHOW_COMPANION_MCP_MODE` flag (see `terminalpro/.env`). Make sure it's `"true"` for the build you're testing against, then open it from the hamburger menu and connect to `http://127.0.0.1:8787`.
 
 Once connected, the sidecar's WebSocket gets a session and tools start working. `get_workspace_snapshot` should return your current dashboard state.
 
@@ -401,11 +401,97 @@ Scenarios are independent unless one explicitly chains to another. **Scenarios 1
 
 ---
 
+## 14. Build a Workspace app from scratch - docs-first routing
+
+**What this exercises**: `search_workspace_docs` and `read_workspace_doc` as the model-controlled path into app-builder resources before authoring backend/app metadata.
+
+**Setup**: no browser state required beyond the MCP server being connected. This is a docs-routing scenario, not a dashboard mutation scenario.
+
+**Prompt**:
+> I want to build a new OpenBB Workspace app for an earnings calendar. Tell me the backend shape and the files I need to create.
+
+**Expected tool sequence**:
+1. `search_workspace_docs` query includes build/app/backend/widgets/apps guidance
+2. `read_workspace_doc` for `openbb://workspace/guides/build-an-app`
+3. `read_workspace_doc` for `openbb://workspace/contract/backend`
+4. Optional follow-up reads for `openbb://workspace/specs/widgets-json`, `openbb://workspace/specs/apps-json`, or an example resource if the answer needs exact field shapes
+
+**Expected end state**:
+- LLM answers from the docs with the backend endpoints/files: `/widgets.json`, optional `/apps.json`, and data endpoints.
+- LLM distinguishes Workspace-managed dashboard rendering from the custom backend's HTTP contract.
+
+**Verify by**:
+- The answer names the resources it used or clearly reflects their contents.
+
+**Watch for**:
+- LLM jumping straight to `manage_dashboard`, `create_widget`, or generic coding advice without reading docs first.
+- LLM claiming Workspace imports backend code directly instead of calling HTTP endpoints.
+
+---
+
+## 15. Debug `widgets.json` - docs-first validation guidance
+
+**What this exercises**: docs search/read before diagnosing custom backend metadata, then optional live validation through `manage_backends` when a URL is available.
+
+**Setup**: if you have a test backend URL, keep it handy. Otherwise run this as a documentation-guided diagnosis only.
+
+**Prompt**:
+> My custom backend has a widgets.json validation error. The table columns are not showing and Workspace says the metadata shape is invalid. Help me debug it.
+
+**Expected tool sequence**:
+1. `search_workspace_docs` query includes widgets.json validation common errors table columns
+2. `read_workspace_doc` for `openbb://workspace/validation/common-errors`
+3. `read_workspace_doc` for `openbb://workspace/specs/widgets-json`
+4. If the user provides a backend URL: `manage_backends` operation=add or update with `validate_widgets=true`
+
+**Expected end state**:
+- LLM checks known metadata failures before guessing.
+- If a backend URL is available, validation is routed through the running Workspace validator.
+
+**Verify by**:
+- The answer calls out concrete checks such as top-level `widgets.json` object shape, widget ids, widget type, params, and table column metadata.
+
+**Watch for**:
+- LLM giving generic JSON advice without using `search_workspace_docs` / `read_workspace_doc`.
+- LLM treating `manage_backends` as the first step before consulting the validation docs.
+
+---
+
+## 16. Convert an endpoint to a widget - docs-first routing
+
+**What this exercises**: endpoint-to-widget docs discovery before choosing widget metadata shape.
+
+**Setup**: no browser mutation required.
+
+**Prompt**:
+> I have an HTTP endpoint `/earnings` that returns rows with symbol, report_date, fiscal_period, estimate, and actual. Convert it into an OpenBB Workspace widget definition.
+
+**Expected tool sequence**:
+1. `search_workspace_docs` query includes convert endpoint widget widgets.json widget types parameters
+2. `read_workspace_doc` for `openbb://workspace/guides/convert-endpoint-to-widget`
+3. `read_workspace_doc` for `openbb://workspace/specs/widget-types`
+4. Optional `read_workspace_doc` for `openbb://workspace/specs/widgets-json` or `openbb://workspace/specs/widget-parameters`
+
+**Expected end state**:
+- LLM proposes a widget metadata shape appropriate for row-shaped earnings data.
+- LLM chooses a widget type based on the docs instead of defaulting blindly.
+
+**Verify by**:
+- The answer includes a plausible `widgets.json` entry and explains the relevant endpoint/param/column choices.
+
+**Watch for**:
+- LLM skipping docs and hallucinating unsupported fields.
+- LLM defaulting to a Plotly chart when the table/widget-type docs point to a better row-shaped representation.
+
+---
+
 ## Coverage map
 
 | Tool | Covered by scenario |
 |------|---------------------|
 | `get_workspace_snapshot` | 1, 5, 6, 11, 12 |
+| `search_workspace_docs` | 14, 15, 16 |
+| `read_workspace_doc` | 14, 15, 16 |
 | `manage_dashboard` (create/read) | 1, 5, 6, 13 |
 | `manage_navigation_bar` (typed tabs) | 2 |
 | `navigate_workspace` (tab) | 3, 4 |
@@ -417,7 +503,7 @@ Scenarios are independent unless one explicitly chains to another. **Scenarios 1
 | `get_params_options` | 7 (conditional) |
 | `create_widget` | 8 |
 | `read_widget` | 3, 8 |
-| `manage_backends` (typed endpoint_headers) | 9 |
+| `manage_backends` (typed endpoint_headers) | 9, 15 |
 | `manage_apps` | 10 |
 | `assign_tasks_to_agents` (typed task_requests) | 11 |
 | `get_widget_data` | 12 |

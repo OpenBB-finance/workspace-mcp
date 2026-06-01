@@ -22,6 +22,7 @@ from workspace_mcp.server._guidance import (
     DASHBOARD_TARGETING_GUIDANCE,
     DATA_SOURCE_SHAPE,
     EXISTING_DASHBOARD_GUIDANCE,
+    NOTE_UPDATE_GUIDANCE,
     PARAM_OPTIONS_SHAPE,
     WIDGET_INSTANCE_GUIDANCE,
     describe_tool,
@@ -228,6 +229,7 @@ def register(server: FastMCP, run: CommandRunner) -> None:
         description=describe_tool(
             "Update one existing widget on a target dashboard.",
             WIDGET_INSTANCE_GUIDANCE,
+            NOTE_UPDATE_GUIDANCE,
             DASHBOARD_TARGETING_GUIDANCE,
             EXISTING_DASHBOARD_GUIDANCE,
         )
